@@ -870,7 +870,6 @@ function DifficultyModal({ girCriteria, setGirCriteria, scrambleCriteria, setScr
 
 function PlayModule() {
   const [tab, setTab]         = useState("card");
-  const [mode, setMode]       = useState("card");
   const [hbhDone, setHbhDone] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
   const [showDiffModal, setShowDiffModal] = useState(false);
@@ -1045,12 +1044,7 @@ function PlayModule() {
               <span style={{fontSize:14}}>&#9881;</span>
               <span>{girCriteria} / {scrambleCriteria}sh</span>
             </button>
-            {/* Mode toggle */}
-            <div style={{display:"flex",background:C.bg,borderRadius:20,
-              border:`1px solid ${C.border}`,padding:2,gap:1,flexShrink:0}}>
-              <Pill active={mode==="hole"} onClick={()=>{setMode("hole");setHbhDone(false);}}>Hole</Pill>
-              <Pill active={mode==="card"} onClick={()=>setMode("card")}>Card</Pill>
-            </div>
+
 
             {msg&&<span style={{fontSize:14,color:C.green,fontFamily:"'Crimson Pro',serif"}}>{msg}</span>}
           </div>
@@ -1115,6 +1109,25 @@ function PlayModule() {
                     textTransform:"uppercase",cursor:"pointer",
                     fontFamily:"'Crimson Pro',serif"}}>New Round</button>
               )}
+            </div>
+          )}
+          {/* Backup + Recover in bottom bar */}
+          {mode==="card"&&(
+            <div style={{display:"flex",gap:8,padding:"8px 16px 0",
+              justifyContent:"flex-end"}}>
+              <button onClick={exportData}
+                style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.blue}44`,
+                  background:C.blue+"11",color:C.blue,fontSize:11,letterSpacing:1,
+                  textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>
+                Backup</button>
+              <label style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+                background:"transparent",color:C.muted,fontSize:11,letterSpacing:1,
+                textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
+                display:"block"}}>
+                Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+              </label>
+              {importMsg&&<span style={{fontSize:11,color:C.green,
+                fontFamily:"'Crimson Pro',serif"}}>{importMsg}</span>}
             </div>
           )}
         </>
@@ -1641,10 +1654,44 @@ const TD = {
 // ROOT APP
 // ============================================================
 
+function PillToggle({ options, value, onChange }) {
+  const idx = options.findIndex(o=>o.value===value);
+  return (
+    <div style={{position:"relative",display:"flex",background:C.bg,
+      borderRadius:20,border:`1px solid ${C.border}`,padding:2,gap:0}}>
+      {/* Sliding thumb */}
+      <div style={{
+        position:"absolute",top:2,bottom:2,borderRadius:18,
+        background:C.surface,border:`1px solid ${C.border}`,
+        width:`calc(${100/options.length}% - 2px)`,
+        transform:`translateX(calc(${idx*100}% + ${idx*2}px))`,
+        transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+        boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
+        pointerEvents:"none"
+      }}/>
+      {options.map((opt,i)=>(
+        <button key={opt.value} onClick={()=>onChange(opt.value)}
+          style={{flex:1,padding:"7px 12px",borderRadius:18,border:"none",
+            cursor:"pointer",background:"transparent",position:"relative",zIndex:1,
+            color:value===opt.value?C.accent:C.muted,
+            fontSize:11,fontWeight:value===opt.value?700:400,
+            letterSpacing:1.5,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",
+            transition:"color 0.2s ease",whiteSpace:"nowrap"}}>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function App() {
   const [module,setModule]=useState("play");
   const [importMsg,setImportMsg]=useState("");
   const [lightMode,setLightMode]=useState(false);
+  const [mode,setMode]=useState("card");
+  const [hbhDone,setHbhDone]=useState(false);
+  const [curHole,setCurHole]=useState(0);
   setTheme(lightMode);
 
   const exportData=()=>{
@@ -1675,10 +1722,10 @@ function App() {
     <div style={{minHeight:"100vh",background:C.bg,
       fontFamily:"'Crimson Pro',serif",color:C.text}}>
 
-      {/* Top chrome */}
+      {/* Top chrome - always visible */}
       <div style={{background:C.bg,borderBottom:`1px solid ${C.border}`,
         padding:"16px 20px 0",paddingTop:"max(16px, env(safe-area-inset-top))"}}>
-        {/* Header: Handicap | Light/Dark | Backup+Recover */}
+                {/* Header: Handicap | Hole/Card | Dark/Light */}
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
           marginBottom:12,gap:8}}>
           {(()=>{
@@ -1689,37 +1736,24 @@ function App() {
             const sub=hcp!==null?"Handicap":rated.length>0?"need "+(3-rated.length)+" more":"Handicap";
             const col=hcp!==null?C.accent:C.dim;
             return(
-              <div style={{textAlign:"left",minWidth:72}}>
-                <div style={{fontSize:12,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+              <div style={{textAlign:"left",minWidth:72,flexShrink:0}}>
+                <div style={{fontSize:10,letterSpacing:2,color:C.muted,textTransform:"uppercase",
                   fontFamily:"'Crimson Pro',serif",marginBottom:1}}>{sub}</div>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:41,fontWeight:900,
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:34,fontWeight:900,
                   color:col,lineHeight:1}}>{label}</div>
               </div>
             );
           })()}
-          <button onClick={()=>setLightMode(l=>!l)}
-            style={{padding:"8px 16px",borderRadius:20,
-              border:`2px solid ${lightMode?C.accent:C.border}`,
-              background:lightMode?C.accent+"22":C.surface,
-              color:lightMode?C.accent:C.muted,
-              fontSize:13,letterSpacing:2,textTransform:"uppercase",
-              cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
-            {lightMode?"Dark Mode":"Light Mode"}
-          </button>
-          <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
-            <button onClick={exportData}
-              style={{padding:"5px 0",borderRadius:7,border:`1px solid ${C.blue}55`,
-                background:C.blue+"11",color:C.blue,fontSize:13,letterSpacing:1,
-                textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
-                width:80,textAlign:"center"}}>Backup</button>
-            <label style={{padding:"5px 0",borderRadius:7,border:`1px solid ${C.border}`,
-              background:"transparent",color:C.muted,fontSize:13,letterSpacing:1,
-              textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
-              width:80,textAlign:"center",display:"block"}}>
-              Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
-            </label>
-            {importMsg&&<span style={{fontSize:12,color:C.green,fontFamily:"'Crimson Pro',serif"}}>{importMsg}</span>}
-          </div>
+          <PillToggle
+            options={[{value:"hole",label:"Hole"},{value:"card",label:"Card"}]}
+            value={mode}
+            onChange={v=>setMode(v)}
+          />
+          <PillToggle
+            options={[{value:false,label:"Dark"},{value:true,label:"Light"}]}
+            value={lightMode}
+            onChange={v=>setLightMode(v)}
+          />
         </div>
         {/* Module tabs */}
         <div style={{display:"flex",gap:2}}>
@@ -1740,7 +1774,7 @@ function App() {
 
       {/* Module content */}
       <div style={{background:C.surface,minHeight:"calc(100vh - 110px)"}}>
-        {module==="play"&&<PlayModule/>}
+        {module==="play"&&<PlayModule mode={mode} setMode={setMode} hbhDone={hbhDone} setHbhDone={setHbhDone} curHole={curHole} setCurHole={setCurHole}/>}
         {module==="practice"&&<PracticeModule/>}
       </div>
       <div style={{textAlign:"center",padding:"10px 0 20px",background:C.bg,
