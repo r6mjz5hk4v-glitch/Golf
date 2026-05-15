@@ -94,7 +94,7 @@ function calcHandicapIndex(rounds) {
 
 // -- Constants
 const APP_VERSION = "v8.9";
-const APP_DATE = "May 14, 2026";
+const APP_DATE = "5/14/26";
 const DEFAULT_PAR = [4,3,4,5,4,3,4,4,5, 4,4,3,5,4,3,4,5,4];
 const PRELOADED_COURSES=[{name:"Falconhead Golf Club",pars:[4,4,5,3,4,4,3,5,4,4,4,3,4,5,4,4,3,5],tees:[{label:"Black",color:"#111827",rating:75.7,slope:137},{label:"Blue",color:"#3b82f6",rating:72.5,slope:133},{label:"White",color:"#e5e7eb",rating:69.9,slope:124},{label:"Red",color:"#ef4444",rating:66.4,slope:118}]},{name:"Winged Foot - West",pars:[4,4,4,3,4,4,3,5,4,3,4,5,3,4,4,5,4,4],tees:[{label:"Blue",color:"#3b82f6",rating:76.4,slope:140},{label:"Black",color:"#111827",rating:74.3,slope:134},{label:"White",color:"#e5e7eb",rating:72.2,slope:132},{label:"Gold",color:"#eab308",rating:67.4,slope:124}]},{name:"Winged Foot - East",pars:[4,5,3,5,4,3,4,5,4,4,4,5,3,4,4,4,3,4],tees:[{label:"Blue",color:"#3b82f6",rating:73.6,slope:140},{label:"White",color:"#e5e7eb",rating:72.2,slope:136},{label:"Green",color:"#22c55e",rating:69.9,slope:131},{label:"Gold",color:"#eab308",rating:67.3,slope:124}]}];
 const SCORE_COLORS = {"-3":"#a855f7","-2":"#ec4899","-1":"#22c55e","0":"transparent","1":"#f59e0b","2":"#ef4444","3":"#7f1d1d"};
@@ -424,9 +424,11 @@ function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, update
               display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
         </div>
         <button onClick={()=>setMode("card")}
-          style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${C.border}`,
-            background:C.surface,color:C.muted,fontSize:12,letterSpacing:2,
-            textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",flexShrink:0}}>
+          style={{marginLeft:"auto",padding:"10px 20px",borderRadius:20,
+            border:`2px solid ${C.accent}`,background:C.accent+"22",
+            color:C.accent,fontSize:16,letterSpacing:2,fontWeight:700,
+            textTransform:"uppercase",cursor:"pointer",
+            fontFamily:"'Crimson Pro',serif",flexShrink:0}}>
           Card View
         </button>
         {total!==null?(
@@ -799,11 +801,79 @@ function CourseModal({onConfirm,onClose}){
   );
 }
 
+function DifficultyModal({ girCriteria, setGirCriteria, scrambleCriteria, setScrambleCriteria, onClose }) {
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+      background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+      alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+        padding:"20px 20px 44px",width:"100%",maxWidth:520,
+        border:`1px solid ${C.border}`,borderBottom:"none"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{width:40,height:5,borderRadius:2,background:C.border,margin:"0 auto 18px"}}/>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,
+          color:C.text,marginBottom:4}}>Round Difficulty</div>
+        <div style={{fontSize:14,color:C.muted,fontFamily:"'Crimson Pro',serif",marginBottom:20}}>
+          Your personal GIR zone and scrambling standard
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:13,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",marginBottom:10}}>GIR Zone</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {[
+              ["Green","On the green in regulation - traditional"],
+              ["25yds","Within 25 yards in regulation"],
+              ["50yds","Within 50 yards in regulation"],
+              ["100yds","Within 100 yards in regulation"],
+            ].map(([opt,desc])=>(
+              <button key={opt} onClick={()=>setGirCriteria(opt)}
+                style={{padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+                  border:`2px solid ${girCriteria===opt?C.green:C.border}`,
+                  background:girCriteria===opt?C.green+"11":"transparent",
+                  display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+                    color:girCriteria===opt?C.green:C.text}}>{opt}</div>
+                  <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>{desc}</div>
+                </div>
+                {girCriteria===opt&&<div style={{width:10,height:12,borderRadius:"50%",
+                  background:C.green,flexShrink:0}}/>}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:13,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",marginBottom:10}}>Scrambling Standard</div>
+          <div style={{display:"flex",gap:10}}>
+            {[[2,"2 shots","Traditional up and down"],[3,"3 shots","Bogey golfer standard"]].map(([opt,label,desc])=>(
+              <button key={opt} onClick={()=>setScrambleCriteria(opt)}
+                style={{flex:1,padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+                  border:`2px solid ${scrambleCriteria===opt?C.accent:C.border}`,
+                  background:scrambleCriteria===opt?C.accent+"11":"transparent"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+                  color:scrambleCriteria===opt?C.accent:C.text}}>{label}</div>
+                <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>{desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={onClose}
+          style={{width:"100%",padding:"13px",borderRadius:12,
+            border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+            color:C.accent,fontSize:16,letterSpacing:2,textTransform:"uppercase",
+            cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 function PlayModule() {
   const [tab, setTab]         = useState("card");
   const [mode, setMode]       = useState("card");
   const [hbhDone, setHbhDone] = useState(false);
   const [showFinish, setShowFinish] = useState(false);
+  const [showDiffModal, setShowDiffModal] = useState(false);
   const [curHole, setCurHole] = useState(0);
   const [confirmNR, setConfirmNR] = useState(false);
   const [girCriteria, setGirCriteria] = useState("100yds");
@@ -957,7 +1027,7 @@ function PlayModule() {
             borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}>
             {/* Course trigger button */}
             <button onClick={()=>setShowCourseModal(true)}
-              style={{flex:"1 1 120px",minWidth:100,background:C.bg,border:`1px solid ${C.border}`,
+              style={{flex:"1 1 100px",minWidth:80,background:C.bg,border:`1px solid ${C.border}`,
                 borderRadius:8,color:course.name?C.text:C.muted,padding:"7px 12px",fontSize:16,
                 fontFamily:"'Crimson Pro',serif",textAlign:"left",cursor:"pointer",
                 display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -965,6 +1035,15 @@ function PlayModule() {
               {course.rating&&<span style={{fontSize:12,color:C.muted,marginLeft:6}}>
                 {course.rating} / {course.slope}
               </span>}
+            </button>
+            {/* Difficulty button */}
+            <button onClick={()=>setShowDiffModal(true)}
+              style={{flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,
+                borderRadius:8,padding:"7px 10px",fontSize:13,cursor:"pointer",
+                fontFamily:"'Crimson Pro',serif",display:"flex",alignItems:"center",gap:4,
+                color:girCriteria!=="100yds"||scrambleCriteria!==3?C.accent:C.muted}}>
+              <span style={{fontSize:14}}>&#9881;</span>
+              <span>{girCriteria} / {scrambleCriteria}sh</span>
             </button>
             {/* Mode toggle */}
             <div style={{display:"flex",background:C.bg,borderRadius:20,
@@ -978,42 +1057,11 @@ function PlayModule() {
           {showCourseModal&&<CourseModal
             onConfirm={(c)=>{setCourse(c);if(c.pars)setPars([...c.pars]);setShowCourseModal(false);}}
             onClose={()=>setShowCourseModal(false)}/>}
-          {/* Criteria selectors */}
-          <div style={{display:"flex",gap:8,padding:"8px 16px",borderBottom:`1px solid ${C.border}`,
-            background:C.subtle,flexWrap:"wrap",alignItems:"center"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
-                fontFamily:"'Crimson Pro',serif",whiteSpace:"nowrap"}}>GIR Zone</span>
-              <div style={{display:"flex",background:C.bg,borderRadius:16,border:`1px solid ${C.border}`,padding:2,gap:1}}>
-                {["Green","25yds","50yds","100yds"].map(opt=>(
-                  <button key={opt} onClick={()=>setGirCriteria(opt)}
-                    style={{padding:"4px 8px",borderRadius:14,border:"none",cursor:"pointer",
-                      fontSize:12,fontWeight:girCriteria===opt?700:400,letterSpacing:0.5,
-                      background:girCriteria===opt?C.green+"33":"transparent",
-                      color:girCriteria===opt?C.green:C.muted,
-                      fontFamily:"'Crimson Pro',serif",transition:"all 0.15s"}}>
-                    {opt}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
-                fontFamily:"'Crimson Pro',serif",whiteSpace:"nowrap"}}>Scramble</span>
-              <div style={{display:"flex",background:C.bg,borderRadius:16,border:`1px solid ${C.border}`,padding:2,gap:1}}>
-                {[2,3].map(opt=>(
-                  <button key={opt} onClick={()=>setScrambleCriteria(opt)}
-                    style={{padding:"4px 10px",borderRadius:14,border:"none",cursor:"pointer",
-                      fontSize:12,fontWeight:scrambleCriteria===opt?700:400,
-                      background:scrambleCriteria===opt?C.accent+"33":"transparent",
-                      color:scrambleCriteria===opt?C.accent:C.muted,
-                      fontFamily:"'Crimson Pro',serif",transition:"all 0.15s"}}>
-                    {opt} shots
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          {showDiffModal&&<DifficultyModal
+            girCriteria={girCriteria} setGirCriteria={setGirCriteria}
+            scrambleCriteria={scrambleCriteria} setScrambleCriteria={setScrambleCriteria}
+            onClose={()=>setShowDiffModal(false)}/>}
+
           </>
           }
 
@@ -1689,16 +1737,16 @@ function App() {
           ))}
         </div>
       </div>
-      <div style={{textAlign:"center",padding:"2px 0 4px",background:C.bg}}>
-        <span style={{fontSize:11,color:C.dim,letterSpacing:2,fontFamily:"'Crimson Pro',serif"}}>
-          {APP_VERSION} &middot; {APP_DATE}
-        </span>
-      </div>
 
       {/* Module content */}
       <div style={{background:C.surface,minHeight:"calc(100vh - 110px)"}}>
         {module==="play"&&<PlayModule/>}
         {module==="practice"&&<PracticeModule/>}
+      </div>
+      <div style={{textAlign:"center",padding:"10px 0 20px",background:C.bg,
+        borderTop:`1px solid ${C.border}`}}>
+        <span style={{fontSize:12,color:C.dim,letterSpacing:1,
+          fontFamily:"'Crimson Pro',serif"}}>{APP_VERSION}_{APP_DATE}</span>
       </div>
     </div>
   );
