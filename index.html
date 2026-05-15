@@ -112,7 +112,7 @@ function scoreDiff(s,p){ return s===null?null:Math.max(-3,Math.min(3,Number(s)-p
 function pct(n,d){ return d>0?Math.round(n/d*100):null; }
 function fmtDate(iso){ return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
 function avg(a){ return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; }
-const emptyHole = ()=>({score:null,gir:null,scramble:null,proximity:"",putts:null,shortPutt:null,notes:""});
+const emptyHole = ()=>({score:null,gir:null,scramble:null,proximity:"",putts:null,shortPutt:null,notes:"",girStrokes:null,scrambleStrokes:null});
 
 function roundStats(holes,pars){
   const played=holes.filter(h=>h.score!==null);
@@ -212,17 +212,22 @@ function Sparkline({ data, color=C.accent, width=90, height=28 }) {
 // Score cell for the card table
 function ScoreCell({ score, par, onChange }) {
   const d=scoreDiff(score,par);
-  const bg=d!==null?SCORE_COLORS[String(d)]:"transparent";
+  const borderCol=d===-3?C.purple:d===-2?C.pink:d===-1?C.accent:d===1?C.muted:d===2?C.red:d===3?"#450a0a":null;
+  const isCircle=d!==null&&d<=-1;
+  const isDouble=d!==null&&d<=-2;
+  const isSquare=d!==null&&d>=1;
+  const isDoubleSquare=d!==null&&d>=2;
   return (
     <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      {d!==null&&d<=-2&&<div style={{position:"absolute",width:34,height:34,borderRadius:"50%",border:`2px solid ${C.pink}`,pointerEvents:"none"}}/>}
-      {d===-1&&<div style={{position:"absolute",width:30,height:30,borderRadius:"50%",border:`2px solid ${C.accent}`,pointerEvents:"none"}}/>}
-      {d!==null&&d>=2&&<div style={{position:"absolute",width:28,height:28,border:`2px solid ${C.red}`,pointerEvents:"none"}}/>}
+      {isDouble&&<div style={{position:"absolute",width:36,height:36,borderRadius:"50%",border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
+      {isCircle&&<div style={{position:"absolute",width:28,height:28,borderRadius:"50%",border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
+      {isDoubleSquare&&<div style={{position:"absolute",width:36,height:36,border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
+      {isSquare&&!isDoubleSquare&&<div style={{position:"absolute",width:28,height:28,border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
       <input type="number" min="1" max="15" value={score===null?"":score}
         onChange={e=>onChange(e.target.value===""?null:Number(e.target.value))}
         style={{width:34,height:34,textAlign:"center",border:"none",outline:"none",
-          background:bg,color:d!==null?"#fff":C.dim,fontFamily:"'Playfair Display',serif",
-          fontSize:15,fontWeight:700,borderRadius:d!==null&&d<=-2?"50%":3,
+          background:"transparent",color:d!==null?borderCol:C.muted,fontFamily:"'Playfair Display',serif",
+          fontSize:15,fontWeight:700,borderRadius:0,
           appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
     </div>
   );
@@ -257,7 +262,7 @@ function SPDot({ value, onChange }) {
   );
 }
 
-function GetDownDot({value,onChange}){const bg=value===true?C.green:value===false?C.red:C.dim;return(<button onClick={()=>onChange(value===null?true:value===true?false:null)} style={{width:44,height:32,borderRadius:5,border:"none",background:bg,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Crimson Pro',serif",transition:"background 0.15s"}}>{value===null?"-":value===true?"UP":"DOWN"}</button>);}
+function GetDownDot({value,onChange}){const bg=value===true?C.green:value===false?C.red:C.dim;return(<button onClick={()=>onChange(value===null?true:value===true?false:null)} style={{width:44,height:32,borderRadius:5,border:"none",background:bg,color:"#fff",fontSize:10,fontWeight:700,cursor:"pointer",fontFamily:"'Crimson Pro',serif",transition:"background 0.15s"}}>{value===null?"-":value===true?"YES":"NO"}</button>);}
 
 // MiniInput for scorecard table cells
 function MiniInput({ value, onChange, type="number", min, max, placeholder, width=34 }) {
@@ -456,8 +461,23 @@ function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, update
           <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
             <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,
               textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>Get Down</div>
-            <HBHToggle value={data.scramble} labels={["-","UP","DOWN"]}
+            <HBHToggle value={data.scramble} labels={["-","YES","NO"]}
               onChange={v=>updateHole(currentHole,"scramble",v)}/>
+          </div>
+        </div>
+        {/* GIR strokes + Get Down strokes */}
+        <div style={{display:"flex",gap:10}}>
+          <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+              textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>GIR Strokes</div>
+            <HBHMini value={data.girStrokes} min={1} max={10} label={null}
+              onChange={v=>updateHole(currentHole,"girStrokes",v)}/>
+          </div>
+          <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+              textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>Get Down Strokes</div>
+            <HBHMini value={data.scrambleStrokes} min={1} max={10} label={null}
+              onChange={v=>updateHole(currentHole,"scrambleStrokes",v)}/>
           </div>
         </div>
         {/* Prox + 4ft */}
@@ -520,45 +540,55 @@ function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, update
   );
 }
 
-function FinishScreen({ holes, pars, onSave, onReview, onNew }) {
+function FinishScreen({ holes, pars, onDone }) {
+  const { useState:us, useEffect:ue } = React;
+  const [phase, setPhase] = us(0); // 0=animating, 1=done
   const played=holes.filter(h=>h.score!==null);
   const score=played.length?played.reduce((a,h)=>a+h.score,0):0;
   const par=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
   const d=score-par;
   const col=d<0?C.accent:d===0?C.muted:C.red;
+  const gir=holes.filter(h=>h.gir===true).length;
+  const girN=holes.filter(h=>h.gir!==null).length;
+  const puttsArr=holes.filter(h=>h.putts!==null);
+  const putts=puttsArr.length?puttsArr.reduce((a,h)=>a+h.putts,0):"--";
+  const sp=holes.filter(h=>h.shortPutt===true).length;
+  const spN=holes.filter(h=>h.shortPutt!==null).length;
+  ue(()=>{ const t=setTimeout(()=>setPhase(1),2200); return ()=>clearTimeout(t); },[]);
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",
-      justifyContent:"center",padding:"40px 24px",gap:12}}>
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+      background:C.bg,zIndex:500,display:"flex",flexDirection:"column",
+      alignItems:"center",justifyContent:"center",gap:16,
+      animation:"fadeIn 0.4s ease"}}>
+      <style>{`@keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes popIn{from{transform:scale(0.5);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
       <div style={{fontSize:10,letterSpacing:4,color:C.muted,textTransform:"uppercase",
         fontFamily:"'Crimson Pro',serif"}}>Round Complete</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:88,fontWeight:900,
-        lineHeight:1,color:col}}>{score}</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:col}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:96,fontWeight:900,
+        lineHeight:1,color:col,animation:"popIn 0.5s 0.3s both"}}>{score}</div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:col,
+        animation:"popIn 0.4s 0.6s both"}}>
         {d>0?`+${d}`:d===0?"Even":d}
       </div>
-      <div style={{display:"flex",gap:24,marginTop:8,flexWrap:"wrap",justifyContent:"center"}}>
-        {[
-          ["GIR",`${holes.filter(h=>h.gir===true).length}/${holes.filter(h=>h.gir!==null).length}`],
-          ["Putts",holes.filter(h=>h.putts!==null).length?holes.filter(h=>h.putts!==null).reduce((a,h)=>a+h.putts,0):"--"],
-          ["<4ft",`${holes.filter(h=>h.shortPutt===true).length}/${holes.filter(h=>h.shortPutt!==null).length}`],
-        ].map(([l,v])=>(
+      <div style={{display:"flex",gap:28,marginTop:8,animation:"fadeIn 0.4s 0.9s both"}}>
+        {[[`${gir}/${girN}`,"GIR"],[putts,"Putts"],[`${sp}/${spN}`,"<4ft"]].map(([v,l])=>(
           <div key={l} style={{textAlign:"center"}}>
-            <div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",fontFamily:"'Crimson Pro',serif"}}>{l}</div>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:"#94a3b8"}}>{v}</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,
+              color:C.text}}>{v}</div>
+            <div style={{fontSize:9,color:C.muted,letterSpacing:2,textTransform:"uppercase",
+              fontFamily:"'Crimson Pro',serif",marginTop:2}}>{l}</div>
           </div>
         ))}
       </div>
-      <div style={{display:"flex",gap:10,marginTop:12,flexWrap:"wrap",justifyContent:"center"}}>
-        <button onClick={onSave} style={{padding:"13px 28px",borderRadius:12,border:`1.5px solid ${C.accent}`,
-          background:C.accent+"22",color:C.accent,fontSize:12,letterSpacing:2,textTransform:"uppercase",
-          cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Save Round</button>
-        <button onClick={onReview} style={{padding:"13px 28px",borderRadius:12,border:`1px solid ${C.border}`,
-          background:"transparent",color:C.muted,fontSize:12,letterSpacing:2,textTransform:"uppercase",
-          cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Review Card</button>
-        <button onClick={onNew} style={{padding:"13px 28px",borderRadius:12,border:`1px solid ${C.border}`,
-          background:"transparent",color:C.dim,fontSize:12,letterSpacing:2,textTransform:"uppercase",
-          cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>New Round</button>
-      </div>
+      {phase===1&&(
+        <button onClick={onDone}
+          style={{marginTop:16,padding:"14px 40px",borderRadius:14,
+            border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+            color:C.accent,fontSize:14,letterSpacing:2,textTransform:"uppercase",
+            cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700,
+            animation:"popIn 0.3s both"}}>
+          Start New Round
+        </button>
+      )}
     </div>
   );
 }
@@ -901,11 +931,11 @@ function PlayModule() {
           )}
           {/* Editing badge */}
           {editingId&&(
-            <div style={{background:"#1a1a2e",border:`1px solid ${C.blue}`,borderRadius:12,
+            <div style={{background:C.surface,border:`1px solid ${C.blue}`,borderRadius:12,
               margin:"12px 16px 0",padding:"10px 14px",display:"flex",
               alignItems:"center",justifyContent:"space-between"}}>
-              <div style={{fontSize:11,color:C.blue,fontFamily:"'Crimson Pro',serif"}}>
-                Editing archived round - Save to update, Clear to cancel
+              <div style={{fontSize:11,color:C.blue,fontFamily:"'Crimson Pro',serif",flex:1}}>
+                Editing archived round - Finish Round to update, New Round to cancel
               </div>
               <button onClick={reset}
                 style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${C.border}`,
@@ -948,9 +978,7 @@ function PlayModule() {
           {/* Hole mode */}
           {mode==="hole"&&(hbhDone
             ?<FinishScreen holes={holes} pars={pars}
-                onSave={()=>{saveRound();setHbhDone(false);}}
-                onReview={()=>{setMode("card");setHbhDone(false);}}
-                onNew={reset}/>
+                onDone={()=>{saveRound();reset();}}/>
             :<HoleView currentHole={curHole} setCurrentHole={setCurHole}
                 holes={holes} pars={pars} updateHole={updateHole}
                 updateParSingle={updateParSingle} onFinish={()=>setHbhDone(true)} setMode={setMode}/>
@@ -1128,30 +1156,44 @@ function RoundDetail({ round, onClose, onEdit }) {
       <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%",minWidth:560}}>
           <thead>
-            <tr>{["#","Par","Score","GIR","Down","Prox","Putts","<4ft"].map(h=>(
-              <th key={h} style={TH}>{h}</th>
+            <tr>{["#","Par","Score","GIR","G.Str","Down","D.Str","Prox","Putts","<4ft"].map(h=>(
+              <th key={h} style={{...getTH(),fontSize:10}}>{h}</th>
             ))}</tr>
           </thead>
           <tbody>
             {holes.map((h,i)=>{
               const d=scoreDiff(h.score,pars[i]);
-              const bg=d!==null?SCORE_COLORS[String(d)]:"transparent";
+              const borderCol=d===-3?C.purple:d===-2?C.pink:d===-1?C.accent:d===1?C.muted:d===2?C.red:d===3?"#450a0a":null;
+              const isCircle=d!==null&&d<=-1;
+              const isDouble=d!==null&&d<=-2;
+              const isSquare=d!==null&&d>=1;
+              const isDoubleSquare=d!==null&&d>=2;
               return (
-                <tr key={i} style={{borderTop:`1px solid ${C.bg}`}}>
-                  <td style={{...getTD(),color:C.muted}}>{i+1}</td>
-                  <td style={{...getTD(),color:C.blue}}>{pars[i]}</td>
-                  <td style={TD}><span style={{display:"inline-block",width:26,height:26,
-                    lineHeight:"26px",textAlign:"center",background:bg,
-                    borderRadius:d!==null&&d<=-2?"50%":3,color:d!==null?"#fff":C.muted,
-                    fontWeight:700,fontSize:13}}>{h.score??"-"}</span></td>
-                  <td style={TD}><span style={{color:h.gir===true?C.green:h.gir===false?C.red:C.border,
-                    fontWeight:700,fontSize:10}}>{h.gir===true?"HIT":h.gir===false?"MIS":"-"}</span></td>
-                  <td style={{...getTD(),color:"#94a3b8"}}>{h.scramble??"-"}</td>
-                  <td style={{...getTD(),color:"#94a3b8"}}>{h.proximity||"-"}</td>
-                  <td style={{...getTD(),color:"#94a3b8"}}>{h.putts??"-"}</td>
-                  <td style={TD}><span style={{color:h.shortPutt===true?C.blue:h.shortPutt===false?C.red:C.border,
-                    fontWeight:700,fontSize:10}}>{h.shortPutt===true?"MADE":h.shortPutt===false?"MISS":"N/A"}</span></td>
-                </tr>
+                <React.Fragment key={i}>
+                  <tr style={{borderTop:`1px solid ${C.border}`}}>
+                    <td style={{...getTD(),color:C.muted,fontSize:12}}>{i+1}</td>
+                    <td style={{...getTD(),color:C.blue,fontSize:12}}>{pars[i]}</td>
+                    <td style={{...getTD()}}>
+                      <div style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28}}>
+                        {isDouble&&<div style={{position:"absolute",width:28,height:28,borderRadius:"50%",border:`2px solid ${borderCol}`}}/>}
+                        {isCircle&&<div style={{position:"absolute",width:20,height:20,borderRadius:"50%",border:`2px solid ${borderCol}`}}/>}
+                        {isDoubleSquare&&<div style={{position:"absolute",width:28,height:28,border:`2px solid ${borderCol}`}}/>}
+                        {isSquare&&!isDoubleSquare&&<div style={{position:"absolute",width:20,height:20,border:`2px solid ${borderCol}`}}/>}
+                        <span style={{color:borderCol||C.muted,fontWeight:700,fontSize:12,position:"relative"}}>{h.score??"-"}</span>
+                      </div>
+                    </td>
+                    <td style={{...getTD()}}><span style={{color:h.gir===true?C.green:h.gir===false?C.red:C.muted,fontWeight:700,fontSize:10}}>{h.gir===true?"HIT":h.gir===false?"MIS":"-"}</span></td>
+                    <td style={{...getTD(),color:C.muted,fontSize:12}}>{h.girStrokes??"-"}</td>
+                    <td style={{...getTD()}}><span style={{color:h.scramble===true?C.green:h.scramble===false?C.red:C.muted,fontWeight:700,fontSize:10}}>{h.scramble===true?"YES":h.scramble===false?"NO":"-"}</span></td>
+                    <td style={{...getTD(),color:C.muted,fontSize:12}}>{h.scrambleStrokes??"-"}</td>
+                    <td style={{...getTD(),color:C.muted,fontSize:12}}>{h.proximity||"-"}</td>
+                    <td style={{...getTD(),color:C.muted,fontSize:12}}>{h.putts??"-"}</td>
+                    <td style={{...getTD()}}><span style={{color:h.shortPutt===true?C.blue:h.shortPutt===false?C.red:C.muted,fontWeight:700,fontSize:10}}>{h.shortPutt===true?"MADE":h.shortPutt===false?"MISS":"N/A"}</span></td>
+                  </tr>
+                  {h.notes&&<tr style={{borderTop:"none"}}>
+                    <td colSpan={10} style={{...getTD(),textAlign:"left",paddingLeft:12,paddingBottom:6,fontSize:11,color:C.muted,fontStyle:"italic",fontFamily:"'Crimson Pro',serif"}}>{h.notes}</td>
+                  </tr>}
+                </React.Fragment>
               );
             })}
           </tbody>
