@@ -1814,21 +1814,7 @@ function App() {
             &#9881;
           </button>
         </div>
-        {/* Module tabs */}
-        <div style={{display:"flex",gap:2}}>
-          {[["play","Play"],["practice","Practice"]].map(([k,l])=>(
-            <button key={k} onClick={()=>setModule(k)}
-              style={{padding:"8px 24px",borderRadius:"8px 8px 0 0",border:"none",
-                cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontSize:14,
-                letterSpacing:2,textTransform:"uppercase",transition:"all 0.15s",
-                background:module===k?C.surface:C.bg,
-                color:module===k?C.text:C.muted,
-                borderTop:module===k?`2px solid ${C.accent}`:"2px solid transparent",
-                fontWeight:module===k?700:400}}>
-              {l}
-            </button>
-          ))}
-        </div>
+
       </div>
 
       {/* Settings modal */}
