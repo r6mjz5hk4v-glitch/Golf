@@ -93,7 +93,7 @@ function calcHandicapIndex(rounds) {
 }
 
 // -- Constants
-const APP_VERSION = "v9.1";
+const APP_VERSION = "v9.2";
 const APP_DATE = "5/14/26";
 const DEFAULT_PAR = [4,3,4,5,4,3,4,4,5, 4,4,3,5,4,3,4,5,4];
 const PRELOADED_COURSES=[{name:"Falconhead Golf Club",pars:[4,4,5,3,4,4,3,5,4,4,4,3,4,5,4,4,3,5],tees:[{label:"Black",color:"#111827",rating:75.7,slope:137},{label:"Blue",color:"#3b82f6",rating:72.5,slope:133},{label:"White",color:"#e5e7eb",rating:69.9,slope:124},{label:"Red",color:"#ef4444",rating:66.4,slope:118}]},{name:"Winged Foot - West",pars:[4,4,4,3,4,4,3,5,4,3,4,5,3,4,4,5,4,4],tees:[{label:"Blue",color:"#3b82f6",rating:76.4,slope:140},{label:"Black",color:"#111827",rating:74.3,slope:134},{label:"White",color:"#e5e7eb",rating:72.2,slope:132},{label:"Gold",color:"#eab308",rating:67.4,slope:124}]},{name:"Winged Foot - East",pars:[4,5,3,5,4,3,4,5,4,4,4,5,3,4,4,4,3,4],tees:[{label:"Blue",color:"#3b82f6",rating:73.6,slope:140},{label:"White",color:"#e5e7eb",rating:72.2,slope:136},{label:"Green",color:"#22c55e",rating:69.9,slope:131},{label:"Gold",color:"#eab308",rating:67.3,slope:124}]}];
@@ -868,6 +868,29 @@ function DifficultyModal({ girCriteria, setGirCriteria, scrambleCriteria, setScr
   );
 }
 
+const exportData=()=>{
+  const data={exported:new Date().toISOString(),rounds:load(LS_ROUNDS),practice:load(LS_PRACTICE)};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url; a.download="gallo-card-backup-"+new Date().toISOString().slice(0,10)+".json"; a.click();
+  URL.revokeObjectURL(url);
+};
+
+const importData=(e)=>{
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(data.rounds) save(LS_ROUNDS,data.rounds);
+      if(data.practice) save(LS_PRACTICE,data.practice);
+      alert("Recovered! Reload the page to see your data.");
+    } catch{alert("Invalid backup file.");}
+  };
+  reader.readAsText(file); e.target.value="";
+};
+
 function PlayModule({ mode, setMode, hbhDone, setHbhDone, curHole, setCurHole }) {
   const [tab, setTab]         = useState("card");
   const [showFinish, setShowFinish] = useState(false);
@@ -1124,8 +1147,7 @@ function PlayModule({ mode, setMode, hbhDone, setHbhDone, curHole, setCurHole })
                 display:"block"}}>
                 Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
               </label>
-              {importMsg&&<span style={{fontSize:11,color:C.green,
-                fontFamily:"'Crimson Pro',serif"}}>{importMsg}</span>}
+              
             </div>
           )}
         </>
@@ -1652,6 +1674,7 @@ const TD = {
 // ROOT APP
 // ============================================================
 
+
 function PillToggle({ options, value, onChange }) {
   const idx = options.findIndex(o=>o.value===value);
   return (
@@ -1692,29 +1715,6 @@ function App() {
   const [curHole,setCurHole]=useState(0);
   setTheme(lightMode);
 
-  const exportData=()=>{
-    const data={exported:new Date().toISOString(),rounds:load(LS_ROUNDS),practice:load(LS_PRACTICE)};
-    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url; a.download="gallo-card-backup-"+new Date().toISOString().slice(0,10)+".json"; a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importData=(e)=>{
-    const file=e.target.files[0]; if(!file) return;
-    const reader=new FileReader();
-    reader.onload=(ev)=>{
-      try{
-        const data=JSON.parse(ev.target.result);
-        if(data.rounds) save(LS_ROUNDS,data.rounds);
-        if(data.practice) save(LS_PRACTICE,data.practice);
-        setImportMsg("Recovered! Refresh to load.");
-        setTimeout(()=>setImportMsg(""),5000);
-      } catch{setImportMsg("Invalid file.");setTimeout(()=>setImportMsg(""),3000);}
-    };
-    reader.readAsText(file); e.target.value="";
-  };
 
   return (
     <div style={{minHeight:"100vh",background:C.bg,
