@@ -801,6 +801,7 @@ function PlayModule() {
   const [tab, setTab]         = useState("card");
   const [mode, setMode]       = useState("card");
   const [hbhDone, setHbhDone] = useState(false);
+  const [showFinish, setShowFinish] = useState(false);
   const [curHole, setCurHole] = useState(0);
   const [confirmNR, setConfirmNR] = useState(false);
   const [holes, setHoles]     = useState(Array(18).fill(null).map(emptyHole));
@@ -976,13 +977,15 @@ function PlayModule() {
           }
 
           {/* Hole mode */}
-          {mode==="hole"&&(hbhDone
-            ?<FinishScreen holes={holes} pars={pars}
-                onDone={()=>{saveRound();reset();}}/>
-            :<HoleView currentHole={curHole} setCurrentHole={setCurHole}
+          {mode==="hole"&&(
+            <HoleView currentHole={curHole} setCurrentHole={setCurHole}
                 holes={holes} pars={pars} updateHole={updateHole}
-                updateParSingle={updateParSingle} onFinish={()=>setHbhDone(true)} setMode={setMode}/>
+                updateParSingle={updateParSingle} onFinish={()=>setShowFinish(true)} setMode={setMode}/>
           )}
+
+          {/* Finish screen overlay - shows from any mode */}
+          {showFinish&&<FinishScreen holes={holes} pars={pars}
+            onDone={()=>{saveRound();reset();setShowFinish(false);}}/>}
 
           {/* Card mode */}
           {mode==="card"&&<CardView holes={holes} pars={pars}
@@ -994,7 +997,7 @@ function PlayModule() {
             <div style={{display:"flex",gap:10,padding:"12px 16px",
               borderTop:`1px solid ${C.border}`,background:C.surface,
               position:"sticky",bottom:0}}>
-              <button onClick={saveRound}
+              <button onClick={()=>setShowFinish(true)}
                 style={{flex:2,padding:"13px",borderRadius:12,
                   border:`1.5px solid ${C.accent}`,background:C.accent+"22",
                   color:C.accent,fontSize:13,letterSpacing:1.5,
