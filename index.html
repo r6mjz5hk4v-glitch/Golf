@@ -136,22 +136,10 @@ function roundStats(holes,pars){
 // ============================================================
 // DESIGN TOKENS
 // ============================================================
-const C = {
-  bg:      "#080d16",
-  surface: "#0d1525",
-  border:  "#1a2540",
-  subtle:  "#0f1a2e",
-  text:    "#e8eef8",
-  muted:   "#4a5568",
-  dim:     "#2d3748",
-  accent:  "#f97316",
-  accentD: "#ea6c0a",
-  blue:    "#3b82f6",
-  green:   "#22c55e",
-  red:     "#ef4444",
-  purple:  "#a855f7",
-  pink:    "#ec4899",
-};
+const DARK={bg:"#080d16",surface:"#0d1525",border:"#1a2540",subtle:"#0f1a2e",text:"#e8eef8",muted:"#4a5568",dim:"#2d3748",accent:"#f97316",accentD:"#ea6c0a",blue:"#3b82f6",green:"#22c55e",red:"#ef4444",purple:"#a855f7",pink:"#ec4899"};
+const LIGHT={bg:"#f0f4f8",surface:"#ffffff",border:"#cbd5e1",subtle:"#e8edf4",text:"#0f172a",muted:"#475569",dim:"#94a3b8",accent:"#ea6c0a",accentD:"#c2510a",blue:"#2563eb",green:"#16a34a",red:"#dc2626",purple:"#9333ea",pink:"#db2777"};
+const C={...DARK};
+function setTheme(light){const src=light?LIGHT:DARK;Object.keys(src).forEach(k=>{C[k]=src[k];});}
 
 // ============================================================
 // SHARED PRIMITIVES
@@ -1556,10 +1544,13 @@ function App() {
             );
           })()}
           <button onClick={()=>setLightMode(l=>!l)}
-            style={{padding:"8px 16px",borderRadius:20,border:`2px solid ${C.border}`,
-              background:C.surface,color:C.muted,fontSize:11,letterSpacing:2,
-              textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
-            Light Mode
+            style={{padding:"8px 16px",borderRadius:20,
+              border:`2px solid ${lightMode?C.accent:C.border}`,
+              background:lightMode?C.accent+"22":C.surface,
+              color:lightMode?C.accent:C.muted,
+              fontSize:11,letterSpacing:2,textTransform:"uppercase",
+              cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+            {lightMode?"Dark Mode":"Light Mode"}
           </button>
           <div style={{display:"flex",flexDirection:"column",gap:5,alignItems:"flex-end"}}>
             <button onClick={exportData}
