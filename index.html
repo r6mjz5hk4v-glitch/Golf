@@ -390,7 +390,7 @@ function HoleNav({ holes, current, setCurrent }) {
   );
 }
 
-function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, updateParSingle, onFinish }) {
+function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, updateParSingle, onFinish, setMode }) {
   const data=holes[currentHole],par=pars[currentHole];
   const d=scoreDiff(data.score,par);
   const bg=d!==null?SCORE_BG[String(d)]:C.subtle;
@@ -948,19 +948,7 @@ function PlayModule() {
               <Pill active={mode==="hole"} onClick={()=>{setMode("hole");setHbhDone(false);}}>Hole</Pill>
               <Pill active={mode==="card"} onClick={()=>setMode("card")}>Card</Pill>
             </div>
-            <button onClick={saveRound}
-              style={{padding:"7px 16px",borderRadius:8,border:`1.5px solid ${C.accent}`,
-                background:C.accent+"22",color:C.accent,fontSize:12,letterSpacing:1.5,
-                textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
-                fontWeight:700,flexShrink:0}}>Finish Round</button>
-            {confirmNR?(
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={()=>{reset();setConfirmNR(false);}} style={{padding:"7px 14px",borderRadius:8,border:`1.5px solid ${C.red}`,background:C.red+"22",color:C.red,fontSize:12,letterSpacing:1,textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Confirm</button>
-                <button onClick={()=>setConfirmNR(false)} style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:11,textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Cancel</button>
-              </div>
-            ):(
-              <button onClick={()=>setConfirmNR(true)} style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:12,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",flexShrink:0}}>New Round</button>
-            )}
+
             {msg&&<span style={{fontSize:12,color:C.green,fontFamily:"'Crimson Pro',serif"}}>{msg}</span>}
           </div>
           {showCourseModal&&<CourseModal
@@ -977,13 +965,50 @@ function PlayModule() {
                 onNew={reset}/>
             :<HoleView currentHole={curHole} setCurrentHole={setCurHole}
                 holes={holes} pars={pars} updateHole={updateHole}
-                updateParSingle={updateParSingle} onFinish={()=>setHbhDone(true)}/>
+                updateParSingle={updateParSingle} onFinish={()=>setHbhDone(true)} setMode={setMode}/>
           )}
 
           {/* Card mode */}
           {mode==="card"&&<CardView holes={holes} pars={pars}
             updateHole={updateHole} setPars={setPars}
             currentHole={curHole} jumpToHole={jumpToHole}/>}
+
+          {/* Sticky bottom bar - card mode only */}
+          {mode==="card"&&(
+            <div style={{display:"flex",gap:10,padding:"12px 16px",
+              borderTop:`1px solid ${C.border}`,background:C.surface,
+              position:"sticky",bottom:0}}>
+              <button onClick={saveRound}
+                style={{flex:2,padding:"13px",borderRadius:12,
+                  border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+                  color:C.accent,fontSize:13,letterSpacing:1.5,
+                  textTransform:"uppercase",cursor:"pointer",
+                  fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Finish Round</button>
+              {confirmNR?(
+                <div style={{flex:1,display:"flex",gap:6}}>
+                  <button onClick={()=>{reset();setConfirmNR(false);}}
+                    style={{flex:1,padding:"13px",borderRadius:12,
+                      border:`1.5px solid ${C.red}`,background:C.red+"22",
+                      color:C.red,fontSize:12,letterSpacing:1,
+                      textTransform:"uppercase",cursor:"pointer",
+                      fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Confirm</button>
+                  <button onClick={()=>setConfirmNR(false)}
+                    style={{flex:1,padding:"13px",borderRadius:12,
+                      border:`1px solid ${C.border}`,background:"transparent",
+                      color:C.muted,fontSize:12,letterSpacing:1,
+                      textTransform:"uppercase",cursor:"pointer",
+                      fontFamily:"'Crimson Pro',serif"}}>Cancel</button>
+                </div>
+              ):(
+                <button onClick={()=>setConfirmNR(true)}
+                  style={{flex:1,padding:"13px",borderRadius:12,
+                    border:`1px solid ${C.border}`,background:"transparent",
+                    color:C.muted,fontSize:13,letterSpacing:1.5,
+                    textTransform:"uppercase",cursor:"pointer",
+                    fontFamily:"'Crimson Pro',serif"}}>New Round</button>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -1478,6 +1503,7 @@ function App() {
   const [module,setModule]=useState("play");
   const [importMsg,setImportMsg]=useState("");
   const [lightMode,setLightMode]=useState(false);
+  setTheme(lightMode);
 
   const exportData=()=>{
     const data={exported:new Date().toISOString(),rounds:load(LS_ROUNDS),practice:load(LS_PRACTICE)};
