@@ -928,7 +928,8 @@ function PlayModule() {
             </div>
           )}
           {/* Action bar */}
-          {mode!=="hole"&&<div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",
+          {mode!=="hole"&&<>
+          <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",
             borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}>
             {/* Course trigger button */}
             <button onClick={()=>setShowCourseModal(true)}
@@ -962,11 +963,10 @@ function PlayModule() {
             )}
             {msg&&<span style={{fontSize:12,color:C.green,fontFamily:"'Crimson Pro',serif"}}>{msg}</span>}
           </div>
-          </div>}
-          {/* Course modal */}
           {showCourseModal&&<CourseModal
             onConfirm={(c)=>{setCourse(c);if(c.pars)setPars([...c.pars]);setShowCourseModal(false);}}
             onClose={()=>setShowCourseModal(false)}/>}
+          </>
 
           {/* Hole mode */}
           {mode==="hole"&&(hbhDone
