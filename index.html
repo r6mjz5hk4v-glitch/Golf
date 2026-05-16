@@ -70,9 +70,13 @@ function loadAutosave() {
 function clearAutosave() {
   try { localStorage.removeItem(LS_AUTOSAVE); } catch {} }
 
-function calcDifferential(score, rating, slope) {
+function calcDifferential(score, rating, slope, holesPlayed) {
   if(!score||!rating||!slope) return null;
-  return Math.round(((score - rating) * 113 / slope) * 10) / 10;
+  // If partial round, extrapolate to 18 holes
+  const adjScore = holesPlayed && holesPlayed < 18
+    ? Math.round(score * (18 / holesPlayed))
+    : score;
+  return Math.round(((adjScore - rating) * 113 / slope) * 10) / 10;
 }
 function calcHandicapIndex(rounds) {
   // Need at least 3 rounds for a meaningful index
@@ -93,7 +97,7 @@ function calcHandicapIndex(rounds) {
 }
 
 // -- Constants
-const APP_VERSION = "v9.4";
+const APP_VERSION = "v9.6";
 const APP_DATE = "5/14/26";
 const DEFAULT_PAR = [4,3,4,5,4,3,4,4,5, 4,4,3,5,4,3,4,5,4];
 const PRELOADED_COURSES=[{name:"Falconhead Golf Club",pars:[4,4,5,3,4,4,3,5,4,4,4,3,4,5,4,4,3,5],tees:[{label:"Black",color:"#111827",rating:75.7,slope:137},{label:"Blue",color:"#3b82f6",rating:72.5,slope:133},{label:"White",color:"#e5e7eb",rating:69.9,slope:124},{label:"Red",color:"#ef4444",rating:66.4,slope:118}]},{name:"Winged Foot - West",pars:[4,4,4,3,4,4,3,5,4,3,4,5,3,4,4,5,4,4],tees:[{label:"Blue",color:"#3b82f6",rating:76.4,slope:140},{label:"Black",color:"#111827",rating:74.3,slope:134},{label:"White",color:"#e5e7eb",rating:72.2,slope:132},{label:"Gold",color:"#eab308",rating:67.4,slope:124}]},{name:"Winged Foot - East",pars:[4,5,3,5,4,3,4,5,4,4,4,5,3,4,4,4,3,4],tees:[{label:"Blue",color:"#3b82f6",rating:73.6,slope:140},{label:"White",color:"#e5e7eb",rating:72.2,slope:136},{label:"Green",color:"#22c55e",rating:69.9,slope:131},{label:"Gold",color:"#eab308",rating:67.3,slope:124}]}];
@@ -108,6 +112,8 @@ const PRACTICE_CATS = [
   {key:"chipping",  label:"Chipping",    emoji:"C", desc:"10 chip shots"},
 ];
 const SHOTS = 10;
+const CLUBS = ["Driver","5 Wood","3 Hybrid","5i","6i","7i","8i","9i","43deg","48deg","52deg","58deg"];
+const CLUB_CATS = ["tee","approach"]; // categories that support club selection
 
 // -- Helpers
 function scoreDiff(s,p){ return s===null?null:Math.max(-3,Math.min(3,Number(s)-p)); }
@@ -118,6 +124,7 @@ const emptyHole = ()=>({score:null,gir:null,scramble:null,proximity:"",putts:nul
 
 function roundStats(holes,pars){
   const played=holes.filter(h=>h.score!==null);
+  const holesPlayed=played.length;
   const score=played.length?played.reduce((a,h)=>a+h.score,0):null;
   const playedPar=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
   const toPar=score!==null?score-playedPar:null;
@@ -131,8 +138,14 @@ function roundStats(holes,pars){
   const avgProx=proxArr.length?(proxArr.reduce((a,h)=>a+Number(h.proximity),0)/proxArr.length).toFixed(1):null;
   const spData=holes.filter(h=>h.shortPutt!==null);
   const spMade=spData.filter(h=>h.shortPutt===true).length;
+  // Lost strokes: missed short putts + missed scramble + missed GIR zone
+  const lostPutts=spData.filter(h=>h.shortPutt===false).length;
+  const lostScramble=missGIR.filter(h=>h.scramble===false).length;
+  const lostGIR=holes.filter(h=>h.gir===false).length;
+  const lostStrokes=lostPutts+lostScramble+lostGIR;
   return {score,toPar,playedHoles:played.length,girHit,girTotal,putts,puttsN,
-          scrambled,scrambleTotal:missGIR.length,avgProx,spMade,spTotal:spData.length};
+          scrambled,scrambleTotal:missGIR.length,avgProx,spMade,spTotal:spData.length,
+          lostStrokes,lostPutts,lostScramble,lostGIR};
 }
 
 // ============================================================
@@ -214,22 +227,22 @@ function Sparkline({ data, color=C.accent, width=90, height=28 }) {
 // Score cell for the card table
 function ScoreCell({ score, par, onChange }) {
   const d=scoreDiff(score,par);
-  const borderCol=d===-3?C.purple:d===-2?C.pink:d===-1?C.accent:d===1?C.muted:d===2?C.red:d===3?"#450a0a":null;
-  const isCircle=d!==null&&d<=-1;
-  const isDouble=d!==null&&d<=-2;
-  const isSquare=d!==null&&d>=1;
-  const isDoubleSquare=d!==null&&d>=2;
+  const uc=C.accent; const oc=C.muted; const nc=C.dim;
+  const col=d===null?nc:d<0?uc:d===0?C.muted:oc;
+  const sz=34;
   return (
     <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      {isDouble&&<div style={{position:"absolute",width:36,height:43,borderRadius:"50%",border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
-      {isCircle&&<div style={{position:"absolute",width:28,height:34,borderRadius:"50%",border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
-      {isDoubleSquare&&<div style={{position:"absolute",width:36,height:43,border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
-      {isSquare&&!isDoubleSquare&&<div style={{position:"absolute",width:28,height:34,border:`2px solid ${borderCol}`,pointerEvents:"none"}}/>}
+      {d!=null&&d<=-2&&<div style={{position:"absolute",width:sz+2,height:sz+2,borderRadius:"50%",border:`2px solid ${uc}`,pointerEvents:"none"}}/>}
+      {d!=null&&d<=-1&&<div style={{position:"absolute",width:sz-6,height:sz-6,borderRadius:"50%",border:`2px solid ${uc}`,pointerEvents:"none"}}/>}
+      {d!=null&&d>=1&&!( d>=2)&&<div style={{position:"absolute",width:sz-4,height:sz-4,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+      {d!=null&&d>=2&&<div style={{position:"absolute",width:sz+2,height:sz+2,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+      {d!=null&&d>=2&&<div style={{position:"absolute",width:sz-6,height:sz-6,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+      {d!=null&&d>=3&&<div style={{position:"absolute",width:sz-13,height:sz-13,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
       <input type="number" min="1" max="15" value={score===null?"":score}
         onChange={e=>onChange(e.target.value===""?null:Number(e.target.value))}
-        style={{width:34,height:41,textAlign:"center",border:"none",outline:"none",
-          background:"transparent",color:d!==null?borderCol:C.muted,fontFamily:"'Playfair Display',serif",
-          fontSize:18,fontWeight:700,borderRadius:0,
+        style={{width:sz,height:sz,textAlign:"center",border:"none",outline:"none",
+          background:"transparent",color:col,fontFamily:"'Playfair Display',serif",
+          fontSize:15,fontWeight:700,borderRadius:0,
           appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
     </div>
   );
@@ -539,53 +552,71 @@ function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, update
 
 function FinishScreen({ holes, pars, onDone }) {
   const { useState:us, useEffect:ue } = React;
-  const [phase, setPhase] = us(0); // 0=animating, 1=done
+  const [phase, setPhase] = us(0);
   const played=holes.filter(h=>h.score!==null);
+  const holesPlayed=played.length;
   const score=played.length?played.reduce((a,h)=>a+h.score,0):0;
   const par=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
   const d=score-par;
   const col=d<0?C.accent:d===0?C.muted:C.red;
-  const gir=holes.filter(h=>h.gir===true).length;
-  const girN=holes.filter(h=>h.gir!==null).length;
-  const puttsArr=holes.filter(h=>h.putts!==null);
-  const putts=puttsArr.length?puttsArr.reduce((a,h)=>a+h.putts,0):"--";
-  const sp=holes.filter(h=>h.shortPutt===true).length;
-  const spN=holes.filter(h=>h.shortPutt!==null).length;
+  const stats=roundStats(holes,pars);
+  const notes=holes.map((h,i)=>h.notes?{hole:i+1,note:h.notes}:null).filter(Boolean);
   ue(()=>{ const t=setTimeout(()=>setPhase(1),2200); return ()=>clearTimeout(t); },[]);
+  const SI=({v,l,sc})=>(
+    <div style={{textAlign:"center",minWidth:54,padding:"0 4px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:sc||C.text}}>{v}</div>
+      <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",fontFamily:"'Crimson Pro',serif",marginTop:1}}>{l}</div>
+    </div>
+  );
   return (
     <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
-      background:C.bg,zIndex:500,display:"flex",flexDirection:"column",
-      alignItems:"center",justifyContent:"center",gap:16,
-      animation:"fadeIn 0.4s ease"}}>
+      background:C.bg,zIndex:500,overflowY:"auto",animation:"fadeIn 0.4s ease"}}>
       <style>{`@keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes popIn{from{transform:scale(0.5);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
-      <div style={{fontSize:12,letterSpacing:4,color:C.muted,textTransform:"uppercase",
-        fontFamily:"'Crimson Pro',serif"}}>Round Complete</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:115,fontWeight:900,
-        lineHeight:1,color:col,animation:"popIn 0.5s 0.3s both"}}>{score}</div>
-      <div style={{fontFamily:"'Playfair Display',serif",fontSize:34,color:col,
-        animation:"popIn 0.4s 0.6s both"}}>
-        {d>0?`+${d}`:d===0?"Even":d}
-      </div>
-      <div style={{display:"flex",gap:28,marginTop:8,animation:"fadeIn 0.4s 0.9s both"}}>
-        {[[`${gir}/${girN}`,"GIR"],[putts,"Putts"],[`${sp}/${spN}`,"<4ft"]].map(([v,l])=>(
-          <div key={l} style={{textAlign:"center"}}>
-            <div style={{fontFamily:"'Playfair Display',serif",fontSize:29,fontWeight:700,
-              color:C.text}}>{v}</div>
-            <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",
-              fontFamily:"'Crimson Pro',serif",marginTop:2}}>{l}</div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+        padding:"40px 20px 30px",gap:14,minHeight:"100%"}}>
+        <div style={{fontSize:11,letterSpacing:4,color:C.muted,textTransform:"uppercase",
+          fontFamily:"'Crimson Pro',serif"}}>{holesPlayed<18?holesPlayed+"-Hole Round":"Round Complete"}</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:110,fontWeight:900,
+          lineHeight:1,color:col,animation:"popIn 0.5s 0.3s both"}}>{score}</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:32,color:col,
+          animation:"popIn 0.4s 0.6s both"}}>{d>0?`+${d}`:d===0?"Even":d}</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,justifyContent:"center",
+          marginTop:4,animation:"fadeIn 0.4s 0.9s both",
+          background:C.surface,borderRadius:16,padding:"14px 16px",
+          border:`1px solid ${C.border}`,width:"100%",maxWidth:420}}>
+          <SI v={stats.girTotal?`${stats.girHit}/${stats.girTotal}`:"--"} l="GIR"/>
+          <SI v={stats.scrambleTotal?`${stats.scrambled}/${stats.scrambleTotal}`:"--"} l="Scrambling"/>
+          <SI v={stats.puttsN?stats.putts:"--"} l="Putts"/>
+          <SI v={stats.spTotal?`${stats.spMade}/${stats.spTotal}`:"--"} l="<4ft"/>
+          <SI v={stats.lostStrokes||0} l="Lost" sc={stats.lostStrokes>0?C.red:C.muted}/>
+          <SI v={stats.avgProx?stats.avgProx+"ft":"--"} l="Avg Prox"/>
+        </div>
+        {notes.length>0&&(
+          <div style={{width:"100%",maxWidth:420,animation:"fadeIn 0.4s 1.2s both"}}>
+            <div style={{fontSize:10,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+              fontFamily:"'Crimson Pro',serif",marginBottom:10}}>Opportunities</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {notes.map(({hole,note})=>(
+                <div key={hole} style={{background:C.surface,border:`1px solid ${C.border}`,
+                  borderRadius:10,padding:"10px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+                  <span style={{fontSize:10,color:C.accent,fontWeight:700,
+                    fontFamily:"'Crimson Pro',serif",letterSpacing:1,flexShrink:0,paddingTop:1}}>H{hole}</span>
+                  <span style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",
+                    fontStyle:"italic",lineHeight:1.4}}>{note}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
+        )}
+        {phase===1&&(
+          <button onClick={onDone}
+            style={{marginTop:8,padding:"14px 40px",borderRadius:14,
+              border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+              color:C.accent,fontSize:16,letterSpacing:2,textTransform:"uppercase",
+              cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700,
+              animation:"popIn 0.3s both"}}>Start New Round</button>
+        )}
       </div>
-      {phase===1&&(
-        <button onClick={onDone}
-          style={{marginTop:16,padding:"14px 40px",borderRadius:14,
-            border:`1.5px solid ${C.accent}`,background:C.accent+"22",
-            color:C.accent,fontSize:17,letterSpacing:2,textTransform:"uppercase",
-            cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700,
-            animation:"popIn 0.3s both"}}>
-          Start New Round
-        </button>
-      )}
     </div>
   );
 }
@@ -684,10 +715,23 @@ function CardView({ holes, pars, updateHole, setPars, currentHole, jumpToHole })
     <div>
       {/* Key stats row */}
       {(()=>{
-        const remainPar=holes.reduce((a,h,i)=>h.score===null?a+pars[i]:a,0);
-        const estFinish=total!==null&&holes.some(h=>h.score===null)?total+remainPar:null;
+        // Est finish at bogey pace (par+1 per hole)
+        const holesLeft=holes.reduce((a,h,i)=>h.score===null?[...a,i]:[...a],[]);
+        const isBackNine=holesLeft.length>0&&holesLeft[0]>=9;
+        const targetHole=isBackNine?17:8; // last hole of current nine
+        const remainingInNine=holes.slice(0,targetHole+1).filter(h=>h.score===null);
+        const bogeyRemain=remainingInNine.reduce((a,h,i)=>{
+          const hIdx=holes.indexOf(h);
+          return a+pars[hIdx]+1;
+        },0);
+        const estFinish=total!==null&&remainingInNine.length>0?total+bogeyRemain:null;
+        const estLabel=isBackNine?"Est/18":"Est/9";
         const gdN=holes.filter(h=>h.scramble!==null).length;
         const gdHit=holes.filter(h=>h.scramble===true).length;
+        const lostPutts=holes.filter(h=>h.shortPutt===false).length;
+        const lostScr=holes.filter(h=>h.gir===false&&h.scramble===false).length;
+        const lostGIR=holes.filter(h=>h.gir===false).length;
+        const lostStrokes=lostPutts+lostScr+lostGIR;
         const D=()=><div style={{width:1,background:C.border,alignSelf:"stretch",margin:"0 5px"}}/>;
         return(
           <div style={{display:"flex",padding:"14px 16px",gap:2,overflowX:"auto",
@@ -697,13 +741,15 @@ function CardView({ holes, pars, updateHole, setPars, currentHole, jumpToHole })
             <Num value={tp!==null?(tp>0?`+${tp}`:tp===0?"E":String(tp)):"-"} size={26}
               color={tp!==null&&tp<0?C.accent:tp===0?C.muted:C.red} sub="To Par"/>
             <D/>
-            <Num value={estFinish??"-"} size={19} color={C.muted} sub="Est Finish"/>
+            <Num value={estFinish??"-"} size={19} color={C.muted} sub={estLabel||"Est Finish"}/>
             <D/>
             <Num value={girN?`${gir}/${girN}`:"-"} size={19} color={C.text} sub="GIR"/>
             <D/>
             <Num value={gdN?`${gdHit}/${gdN}`:"-"} size={19} color={C.text} sub="Scrambling"/>
             <D/>
             <Num value={puttsN?putts:"-"} size={19} color={C.text} sub="Putts"/>
+            <D/>
+            <Num value={lostStrokes} size={19} color={lostStrokes>0?C.red:C.muted} sub="Lost"/>
             <div style={{flex:1}}/>
           </div>
         );
@@ -953,7 +999,9 @@ function PlayModule({ mode, setMode, hbhDone, setHbhDone, curHole, setCurHole })
   const saveRound=()=>{
     const stats=roundStats(holes,pars);
     if(stats.playedHoles===0){setMsg("No scores yet.");setTimeout(()=>setMsg(""),3000);return;}
-    const diff=calcDifferential(stats.score,course.rating,course.slope);
+    const diff=calcDifferential(stats.score,course.rating,course.slope,stats.playedHoles);
+    // Save current pars back to course library
+    if(course.name&&course.rating){const sc=load(LS_COURSES);const ex=sc.filter(s=>s.name!==course.name);save(LS_COURSES,[{...course,pars:[...pars]},...ex].slice(0,50));}
     let updated;
     if(editingId){
       // Update existing round
@@ -965,7 +1013,8 @@ function PlayModule({ mode, setMode, hbhDone, setHbhDone, curHole, setCurHole })
     } else {
       const r={id:Date.now().toString(),date:new Date().toISOString(),
         courseName:course.name,courseRating:course.rating,courseSlope:course.slope,
-        differential:diff,holes,pars,stats,girCriteria,scrambleCriteria};
+        differential:diff,holes,pars,stats,girCriteria,scrambleCriteria,
+        holesPlayed:stats.playedHoles};
       updated=[r,...rounds];
       setMsg("Round archived!"); setTimeout(()=>setMsg(""),3000);
     }
@@ -1218,8 +1267,8 @@ function RoundCard({ round, onDelete, onSelect }) {
         </div>
       </div>
       <div style={{display:"flex",gap:14,marginTop:10,flexWrap:"wrap"}}>
-        {[["GIR",pct(s.girHit,s.girTotal)!==null?pct(s.girHit,s.girTotal)+"%":"--"],
-          ["Scramble",pct(s.scrambled,s.scrambleTotal)!==null?pct(s.scrambled,s.scrambleTotal)+"%":"--"],
+        {[["GIR",s.girTotal?`${s.girHit}/${s.girTotal}`:"--"],
+          ["Scrambling",s.scrambleTotal?`${s.scrambled}/${s.scrambleTotal}`:"--"],
           ["Putts",s.puttsN?s.putts:"--"],["Prox",s.avgProx?s.avgProx+"ft":"--"],
           ["<4ft",pct(s.spMade,s.spTotal)!==null?pct(s.spMade,s.spTotal)+"%":"--"],
         ].map(([l,v])=>(
@@ -1262,23 +1311,28 @@ function RoundDetail({ round, onClose, onEdit }) {
           </span>
         )}
       </div>
-      {(round.girCriteria||round.scrambleCriteria)&&(
-        <div style={{display:"flex",gap:6,marginBottom:12}}>
-          {round.girCriteria&&<span style={{fontSize:12,color:C.green,background:C.green+"11",
-            border:`1px solid ${C.green}33`,borderRadius:10,padding:"2px 8px",
-            fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>GIR Zone: {round.girCriteria}</span>}
-          {round.scrambleCriteria&&<span style={{fontSize:12,color:C.accent,background:C.accent+"11",
-            border:`1px solid ${C.accent}33`,borderRadius:10,padding:"2px 8px",
-            fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>Scramble: {round.scrambleCriteria} shots</span>}
-        </div>
-      )}
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+        {round.holesPlayed&&round.holesPlayed<18&&(
+          <span style={{fontSize:10,color:C.blue,background:C.blue+"11",
+            border:`1px solid ${C.blue}33`,borderRadius:10,padding:"2px 8px",
+            fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>
+            {round.holesPlayed} of 18 holes
+          </span>
+        )}
+        {round.girCriteria&&<span style={{fontSize:10,color:C.green,background:C.green+"11",
+          border:`1px solid ${C.green}33`,borderRadius:10,padding:"2px 8px",
+          fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>GIR Zone: {round.girCriteria}</span>}
+        {round.scrambleCriteria&&<span style={{fontSize:10,color:C.accent,background:C.accent+"11",
+          border:`1px solid ${C.accent}33`,borderRadius:10,padding:"2px 8px",
+          fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>Scramble: {round.scrambleCriteria} shots</span>}
+      </div>
       <div style={{display:"flex",gap:4,padding:"10px 0",borderTop:`1px solid ${C.border}`,
         borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",marginBottom:14}}>
         {[["Score",s.score],["To Par",s.toPar!==null?(s.toPar>0?`+${s.toPar}`:s.toPar===0?"E":s.toPar):"--"],
-          ["GIR",s.girTotal?pct(s.girHit,s.girTotal)+"%":"--"],
-          ["Scrambling",s.scrambleTotal?pct(s.scrambled,s.scrambleTotal)+"%":"--"],
+          ["GIR",s.girTotal?`${s.girHit}/${s.girTotal}`:"--"],
+          ["Scrambling",s.scrambleTotal?`${s.scrambled}/${s.scrambleTotal}`:"--"],
           ["Putts",s.puttsN?s.putts:"--"],["Prox",s.avgProx?s.avgProx+"ft":"--"],
-          ["<4ft",s.spTotal?pct(s.spMade,s.spTotal)+"%":"--"],
+          ["<4ft",s.spTotal?`${s.spMade}/${s.spTotal}`:"--"],
         ].map(([l,v],i,arr)=>(
           <React.Fragment key={l}>
             <div style={{textAlign:"center",minWidth:54,padding:"0 4px"}}>
@@ -1294,12 +1348,12 @@ function RoundDetail({ round, onClose, onEdit }) {
       <div style={{overflowX:"auto"}}>
         <table style={{borderCollapse:"collapse",width:"100%",minWidth:560}}>
           <thead>
-            <tr>{["#","Par","Score","GIR","G.Str","Down","S.Str","Prox","Putts","<4ft"].map(h=>(
+            <tr>{["#","Par","Score","GIR","G.Str","Down","S.Str","Prox","Putts","<4ft","Notes"].map(h=>(
               <th key={h} style={{...getTH(),fontSize:12}}>{h}</th>
             ))}</tr>
           </thead>
           <tbody>
-            {holes.map((h,i)=>{
+            {holes.map((h,i)=>{ if(h.score===null) return null;
               const d=scoreDiff(h.score,pars[i]);
               const borderCol=d===-3?C.purple:d===-2?C.pink:d===-1?C.accent:d===1?C.muted:d===2?C.red:d===3?"#450a0a":null;
               const isCircle=d!==null&&d<=-1;
@@ -1327,6 +1381,7 @@ function RoundDetail({ round, onClose, onEdit }) {
                     <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.proximity||"-"}</td>
                     <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.putts??"-"}</td>
                     <td style={{...getTD()}}><span style={{color:h.shortPutt===true?C.blue:h.shortPutt===false?C.red:C.muted,fontWeight:700,fontSize:12}}>{h.shortPutt===true?"MADE":h.shortPutt===false?"MISS":"N/A"}</span></td>
+                    <td style={{...getTD(),textAlign:"left",fontSize:11,color:C.muted,fontStyle:"italic",fontFamily:"'Crimson Pro',serif",maxWidth:120,paddingLeft:8}}>{h.notes||""}</td>
                   </tr>
                   {h.notes&&<tr style={{borderTop:"none"}}>
                     <td colSpan={10} style={{...getTD(),textAlign:"left",paddingLeft:12,paddingBottom:6,fontSize:13,color:C.muted,fontStyle:"italic",fontFamily:"'Crimson Pro',serif"}}>{h.notes}</td>
@@ -1408,7 +1463,7 @@ function ShotButton({ value, index, onChange }) {
   );
 }
 
-function PracticeSession({ catKey, onSave, onCancel }) {
+function PracticeSession({ catKey, club, onSave, onCancel }) {
   const cat=PRACTICE_CATS.find(c=>c.key===catKey);
   const [shots,setShots]=useState(Array(SHOTS).fill(null));
   const [notes,setNotes]=useState("");
@@ -1598,172 +1653,264 @@ function PracticeAnalysis({ history }) {
 }
 
 function PracticeModule() {
-  const [tab,setTab]=useState("log");
-  const [active,setActive]=useState(null);
   const [history,setHistory]=useState(()=>load(LS_PRACTICE));
+  const [active,setActive]=useState(null); // {catKey, club?} = logging session
+  const [drill,setDrill]=useState(null); // {catKey, club?} = drill view
+  const [logCat,setLogCat]=useState(null); // category to log
 
-  const saveSession=(s)=>{const u=[s,...history];setHistory(u);save(LS_PRACTICE,u);setActive(null);setTab("history");};
-  const deleteSession=(id)=>{const u=history.filter(s=>s.id!==id);setHistory(u);save(LS_PRACTICE,u);};
+  const saveSession=(s)=>{
+    const u=[s,...history];
+    setHistory(u);save(LS_PRACTICE,u);setActive(null);
+  };
+  const deleteSession=(id)=>{
+    const u=history.filter(s=>s.id!==id);
+    setHistory(u);save(LS_PRACTICE,u);
+  };
 
-  if(active) return <PracticeSession catKey={active} onSave={saveSession} onCancel={()=>setActive(null)}/>;
+  // Logging flow
+  if(active) return <PracticeSession catKey={active.catKey} club={active.club}
+    onSave={saveSession} onCancel={()=>setActive(null)}/>;
 
-  return (
-    <div>
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,paddingLeft:8}}>
-        <Tab active={tab==="log"} onClick={()=>setTab("log")}>Log</Tab>
-        <Tab active={tab==="history"} onClick={()=>setTab("history")} badge={history.length}>History</Tab>
-        <Tab active={tab==="analysis"} onClick={()=>setTab("analysis")}>Analysis</Tab>
-      </div>
-      {tab==="log"&&(
-        <div style={{padding:"16px",maxWidth:500,margin:"0 auto"}}>
-          <div style={{fontSize:11,color:C.dim,letterSpacing:3,textTransform:"uppercase",
-            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Select category</div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:10}}>
-            {PRACTICE_CATS.map(cat=>{
-              const sessions=history.filter(s=>s.category===cat.key);
-              const last=sessions.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
-              const lp=last?pct(last.hits,last.logged):null;
-              const lc=lp!==null?(lp>=70?C.green:lp>=50?C.accent:C.red):null;
+  // Drill: club level (tee/approach -> by club)
+  if(drill&&drill.club!==undefined) {
+    const sessions=history.filter(s=>s.category===drill.catKey&&s.club===drill.club);
+    const cat=PRACTICE_CATS.find(c=>c.key===drill.catKey);
+    return (
+      <div style={{padding:"14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <button onClick={()=>setDrill({catKey:drill.catKey})}
+            style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+              background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+              fontFamily:"'Crimson Pro',serif"}}>Back</button>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+            {cat.label} - {drill.club}
+          </div>
+          <button onClick={()=>setActive({catKey:drill.catKey,club:drill.club})}
+            style={{marginLeft:"auto",padding:"8px 16px",borderRadius:10,
+              border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+              color:C.accent,fontSize:12,letterSpacing:1,textTransform:"uppercase",
+              cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>+ Log</button>
+        </div>
+        {sessions.length===0?(
+          <div style={{textAlign:"center",padding:"40px 0",color:C.dim,fontFamily:"'Crimson Pro',serif",fontSize:16}}>
+            No sessions yet for {drill.club}
+          </div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {[...sessions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+              const p=Math.round(s.hits/s.logged*100);
+              const col=p>=70?C.green:p>=50?C.muted:C.red;
               return (
-                <button key={cat.key} onClick={()=>setActive(cat.key)}
-                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
-                    padding:"16px 14px",textAlign:"left",cursor:"pointer",transition:"border-color 0.15s",
-                    display:"flex",flexDirection:"column",gap:6}}>
-                  <div style={{width:36,height:43,borderRadius:9,background:C.bg,
-                    border:`1px solid ${C.border}`,display:"flex",alignItems:"center",
-                    justifyContent:"center",fontFamily:"'Playfair Display',serif",
-                    fontSize:20,fontWeight:700,color:C.accent}}>{cat.emoji}</div>
-                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,
-                    color:C.text}}>{cat.label}</div>
-                  <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif"}}>{cat.desc}</div>
-                  {lp!==null&&<div style={{fontSize:12,color:lc,fontFamily:"'Crimson Pro',serif"}}>
-                    Last: {lp}%</div>}
-                </button>
+                <div key={s.id} style={{background:C.surface,border:`1px solid ${C.border}`,
+                  borderRadius:12,padding:"12px 14px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontFamily:"'Crimson Pro',serif",fontSize:13,color:C.muted}}>
+                      {fmtDate(s.date)}</div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:col}}>
+                      {s.hits}/{s.logged}</div>
+                  </div>
+                  {s.notes&&<div style={{fontSize:12,color:C.muted,fontStyle:"italic",
+                    fontFamily:"'Crimson Pro',serif",marginTop:4}}>{s.notes}</div>}
+                  <button onClick={()=>deleteSession(s.id)}
+                    style={{marginTop:6,padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+                      background:"transparent",color:C.dim,fontSize:10,cursor:"pointer",
+                      fontFamily:"'Crimson Pro',serif"}}>Delete</button>
+                </div>
               );
             })}
           </div>
+        )}
+      </div>
+    );
+  }
+
+  // Drill: category level (tee/approach -> show by club cards, others -> show sessions)
+  if(drill) {
+    const cat=PRACTICE_CATS.find(c=>c.key===drill.catKey);
+    const isClubCat=CLUB_CATS.includes(drill.catKey);
+    const catSessions=history.filter(s=>s.category===drill.catKey);
+
+    if(isClubCat) {
+      // Show club breakdown cards
+      return (
+        <div style={{padding:"14px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+            <button onClick={()=>setDrill(null)}
+              style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+                background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+                fontFamily:"'Crimson Pro',serif"}}>Back</button>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+              {cat.label}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {CLUBS.map(club=>{
+              const clubSessions=catSessions.filter(s=>s.club===club);
+              if(clubSessions.length===0) return null;
+              const totalHits=clubSessions.reduce((a,s)=>a+s.hits,0);
+              const totalLogged=clubSessions.reduce((a,s)=>a+s.logged,0);
+              const pct=Math.round(totalHits/totalLogged*100);
+              const col=pct>=70?C.green:pct>=50?C.muted:C.red;
+              return (
+                <div key={club} onClick={()=>setDrill({catKey:drill.catKey,club})}
+                  style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+                    padding:"14px 16px",cursor:"pointer",display:"flex",
+                    justifyContent:"space-between",alignItems:"center"}}>
+                  <div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+                      color:C.text}}>{club}</div>
+                    <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+                      {clubSessions.length} session{clubSessions.length!==1?"s":""}
+                    </div>
+                  </div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:col}}>
+                    {pct}%
+                  </div>
+                </div>
+              );
+            }).filter(Boolean)}
+            {CLUBS.every(club=>catSessions.filter(s=>s.club===club).length===0)&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:C.dim,
+                fontFamily:"'Crimson Pro',serif",fontSize:16}}>No sessions yet</div>
+            )}
+            <button onClick={()=>setActive({catKey:drill.catKey})}
+              style={{padding:"13px",borderRadius:12,border:`1.5px solid ${C.accent}`,
+                background:C.accent+"22",color:C.accent,fontSize:13,letterSpacing:1.5,
+                textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+              + Log Session
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Non-club category: show sessions directly
+    return (
+      <div style={{padding:"14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+          <button onClick={()=>setDrill(null)}
+            style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+              background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+              fontFamily:"'Crimson Pro',serif"}}>Back</button>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+            {cat.label}</div>
+          <button onClick={()=>setActive({catKey:drill.catKey})}
+            style={{marginLeft:"auto",padding:"8px 16px",borderRadius:10,
+              border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+              color:C.accent,fontSize:12,letterSpacing:1,textTransform:"uppercase",
+              cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>+ Log</button>
+        </div>
+        {catSessions.length===0?(
+          <div style={{textAlign:"center",padding:"40px 0",color:C.dim,
+            fontFamily:"'Crimson Pro',serif",fontSize:16}}>No sessions yet</div>
+        ):(
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {[...catSessions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+              const p=Math.round(s.hits/s.logged*100);
+              const col=p>=70?C.green:p>=50?C.muted:C.red;
+              return (
+                <div key={s.id} style={{background:C.surface,border:`1px solid ${C.border}`,
+                  borderRadius:12,padding:"12px 14px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{fontFamily:"'Crimson Pro',serif",fontSize:13,color:C.muted}}>
+                      {fmtDate(s.date)}</div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:col}}>
+                      {s.hits}/{s.logged}</div>
+                  </div>
+                  {s.notes&&<div style={{fontSize:12,color:C.muted,fontStyle:"italic",
+                    fontFamily:"'Crimson Pro',serif",marginTop:4}}>{s.notes}</div>}
+                  <button onClick={()=>deleteSession(s.id)}
+                    style={{marginTop:6,padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+                      background:"transparent",color:C.dim,fontSize:10,cursor:"pointer",
+                      fontFamily:"'Crimson Pro',serif"}}>Delete</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Top level: category cards (History view)
+  return (
+    <div style={{padding:"14px"}}>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,
+        color:C.text,marginBottom:4}}>Practice History</div>
+      <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginBottom:16}}>
+        Tap a category to drill in
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+        {PRACTICE_CATS.map(cat=>{
+          const sessions=history.filter(s=>s.category===cat.key);
+          const totalHits=sessions.reduce((a,s)=>a+s.hits,0);
+          const totalLogged=sessions.reduce((a,s)=>a+s.logged,0);
+          const pct=totalLogged?Math.round(totalHits/totalLogged*100):null;
+          const col=pct===null?C.dim:pct>=70?C.green:pct>=50?C.muted:C.red;
+          const recent=sessions.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+          return (
+            <div key={cat.key} onClick={()=>setDrill({catKey:cat.key})}
+              style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+                padding:"14px 16px",cursor:"pointer",display:"flex",
+                justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,
+                  color:C.text}}>{cat.label}</div>
+                <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+                  {sessions.length} session{sessions.length!==1?"s":""}
+                  {recent?" - last "+fmtDate(recent.date):""}
+                </div>
+              </div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:col}}>
+                {pct!==null?pct+"%":"--"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <button onClick={()=>setLogCat("choose")}
+        style={{width:"100%",padding:"13px",borderRadius:12,
+          border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+          color:C.accent,fontSize:13,letterSpacing:1.5,textTransform:"uppercase",
+          cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+        + Log Session
+      </button>
+      {/* Category picker for logging */}
+      {logCat==="choose"&&(
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+          background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+          alignItems:"flex-end",justifyContent:"center"}}
+          onClick={()=>setLogCat(null)}>
+          <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+            padding:"20px 20px 44px",width:"100%",maxWidth:520,
+            border:`1px solid ${C.border}`,borderBottom:"none"}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{width:40,height:4,borderRadius:2,background:C.border,margin:"0 auto 16px"}}/>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+              color:C.text,marginBottom:14}}>Choose Category</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {PRACTICE_CATS.map(cat=>(
+                <button key={cat.key} onClick={()=>{setLogCat(null);setActive({catKey:cat.key});}}
+                  style={{padding:"13px 16px",borderRadius:12,border:`1px solid ${C.border}`,
+                    background:C.bg,cursor:"pointer",textAlign:"left",
+                    fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:C.text}}>
+                  {cat.label}
+                  <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+                    fontWeight:400,marginTop:2}}>{cat.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
-      {tab==="history"&&<PracticeHistory history={history} onDelete={deleteSession}/>}
-      {tab==="analysis"&&<PracticeAnalysis history={history}/>}
     </div>
   );
 }
 
-// ============================================================
-// TABLE STYLES (shared)
-// ============================================================
-const TH = {
-  padding:"8px 3px",fontSize:12,letterSpacing:2,textTransform:"uppercase",
-  color:C.muted,fontFamily:"'Crimson Pro',serif",fontWeight:600,textAlign:"center",
-  borderBottom:`1px solid ${C.border}`,background:C.surface,
-};
-const TD = {
-  padding:"4px 2px",textAlign:"center",
-  fontFamily:"'Playfair Display',serif",fontSize:16,background:C.surface,
-};
-
-// ============================================================
-// ROOT APP
-// ============================================================
-
-
-function SettingsModal({ lightMode, setLightMode, module, setModule, onClose }) {
-  return (
-    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
-      background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
-      alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
-      <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
-        padding:"20px 20px 44px",width:"100%",maxWidth:520,
-        border:`1px solid ${C.border}`,borderBottom:"none"}}
-        onClick={e=>e.stopPropagation()}>
-        <div style={{width:40,height:4,borderRadius:2,background:C.border,margin:"0 auto 20px"}}/>
-        <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,
-          color:C.text,marginBottom:20}}>Settings</div>
-
-        {/* Mode: Play vs Practice */}
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
-            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Mode</div>
-          <div style={{display:"flex",gap:10}}>
-            {[["play","Play","Score your round"],["practice","Practice","Log practice sessions"]].map(([k,label,desc])=>(
-              <button key={k} onClick={()=>setModule(k)}
-                style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
-                  border:`2px solid ${module===k?C.accent:C.border}`,
-                  background:module===k?C.accent+"11":"transparent"}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
-                  color:module===k?C.accent:C.text}}>{label}</div>
-                <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
-                  marginTop:3}}>{desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Theme */}
-        <div style={{marginBottom:24}}>
-          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
-            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Theme</div>
-          <div style={{display:"flex",gap:10}}>
-            {[[false,"Dark","Easy on the eyes"],[true,"Light","Bright display"]].map(([val,label,desc])=>(
-              <button key={String(val)} onClick={()=>setLightMode(val)}
-                style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
-                  border:`2px solid ${lightMode===val?C.blue:C.border}`,
-                  background:lightMode===val?C.blue+"11":"transparent"}}>
-                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
-                  color:lightMode===val?C.blue:C.text}}>{label}</div>
-                <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
-                  marginTop:3}}>{desc}</div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <button onClick={onClose}
-          style={{width:"100%",padding:"14px",borderRadius:12,
-            border:`1.5px solid ${C.accent}`,background:C.accent+"22",
-            color:C.accent,fontSize:13,letterSpacing:2,textTransform:"uppercase",
-            cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Done</button>
-      </div>
-    </div>
-  );
-}
-
-function PillToggle({ options, value, onChange }) {
-  const idx = options.findIndex(o=>o.value===value);
-  return (
-    <div style={{position:"relative",display:"flex",background:C.bg,
-      borderRadius:20,border:`1px solid ${C.border}`,padding:2,gap:0}}>
-      {/* Sliding thumb */}
-      <div style={{
-        position:"absolute",top:2,bottom:2,borderRadius:18,
-        background:C.surface,border:`1px solid ${C.border}`,
-        width:`calc(${100/options.length}% - 2px)`,
-        transform:`translateX(calc(${idx*100}% + ${idx*2}px))`,
-        transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",
-        boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
-        pointerEvents:"none"
-      }}/>
-      {options.map((opt,i)=>(
-        <button key={opt.value} onClick={()=>onChange(opt.value)}
-          style={{flex:1,padding:"12px 22px",borderRadius:20,border:"none",
-            cursor:"pointer",background:"transparent",position:"relative",zIndex:1,
-            color:value===opt.value?C.accent:C.muted,
-            fontSize:13,fontWeight:value===opt.value?700:400,
-            letterSpacing:1.5,textTransform:"uppercase",
-            fontFamily:"'Crimson Pro',serif",
-            transition:"color 0.2s ease",whiteSpace:"nowrap"}}>
-          {opt.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function App() {
   const [module,setModule]=useState("play");
   const [importMsg,setImportMsg]=useState("");
-  const [lightMode,setLightMode]=useState(false);
+  const [lightMode,setLightMode]=useState(true);
   const [mode,setMode]=useState("card");
   const [hbhDone,setHbhDone]=useState(false);
   const [curHole,setCurHole]=useState(0);
