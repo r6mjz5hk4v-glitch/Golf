@@ -1907,6 +1907,109 @@ function PracticeModule() {
 }
 
 
+function PillToggle({ options, value, onChange }) {
+  const idx = options.findIndex(o=>String(o.value)===String(value));
+  return (
+    <div style={{position:"relative",display:"flex",background:C.bg,
+      borderRadius:20,border:`1px solid ${C.border}`,padding:2,gap:0}}>
+      <div style={{
+        position:"absolute",top:2,bottom:2,borderRadius:18,
+        background:C.surface,border:`1px solid ${C.border}`,
+        width:`calc(${100/options.length}% - 2px)`,
+        transform:`translateX(calc(${idx*100}% + ${idx*2}px))`,
+        transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+        boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
+        pointerEvents:"none"
+      }}/>
+      {options.map((opt,i)=>(
+        <button key={String(opt.value)} onClick={()=>onChange(opt.value)}
+          style={{flex:1,padding:"12px 22px",borderRadius:20,border:"none",
+            cursor:"pointer",background:"transparent",position:"relative",zIndex:1,
+            color:String(value)===String(opt.value)?C.accent:C.muted,
+            fontSize:13,fontWeight:String(value)===String(opt.value)?700:400,
+            letterSpacing:1.5,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",
+            transition:"color 0.2s ease",whiteSpace:"nowrap"}}>
+          {opt.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SettingsModal({ lightMode, setLightMode, module, setModule, importMsg, onClose }) {
+  return (
+    <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+      background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+      alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+        padding:"20px 20px 44px",width:"100%",maxWidth:520,
+        border:`1px solid ${C.border}`,borderBottom:"none"}}
+        onClick={e=>e.stopPropagation()}>
+        <div style={{width:40,height:4,borderRadius:2,background:C.border,margin:"0 auto 20px"}}/>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,
+          color:C.text,marginBottom:20}}>Settings</div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Mode</div>
+          <div style={{display:"flex",gap:10}}>
+            {[["play","Play","Score your round"],["practice","Practice","Log practice sessions"]].map(([k,label,desc])=>(
+              <button key={k} onClick={()=>setModule(k)}
+                style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+                  border:`2px solid ${module===k?C.accent:C.border}`,
+                  background:module===k?C.accent+"11":"transparent"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+                  color:module===k?C.accent:C.text}}>{label}</div>
+                <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+                  marginTop:3}}>{desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Theme</div>
+          <div style={{display:"flex",gap:10}}>
+            {[[false,"Dark","Easy on the eyes"],[true,"Light","Bright display"]].map(([val,label,desc])=>(
+              <button key={String(val)} onClick={()=>setLightMode(val)}
+                style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+                  border:`2px solid ${lightMode===val?C.blue:C.border}`,
+                  background:lightMode===val?C.blue+"11":"transparent"}}>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+                  color:lightMode===val?C.blue:C.text}}>{label}</div>
+                <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+                  marginTop:3}}>{desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+            fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Data</div>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={exportData}
+              style={{flex:1,padding:"12px",borderRadius:12,cursor:"pointer",textAlign:"center",
+                border:`1px solid ${C.blue}44`,background:C.blue+"11",color:C.blue,
+                fontFamily:"'Crimson Pro',serif",fontSize:13,fontWeight:700}}>Backup</button>
+            <label style={{flex:1,padding:"12px",borderRadius:12,cursor:"pointer",textAlign:"center",
+              border:`1px solid ${C.border}`,background:"transparent",color:C.muted,
+              fontFamily:"'Crimson Pro',serif",fontSize:13,display:"block"}}>
+              Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+            </label>
+          </div>
+          {importMsg&&<div style={{fontSize:11,color:C.green,textAlign:"center",marginTop:6,
+            fontFamily:"'Crimson Pro',serif"}}>{importMsg}</div>}
+        </div>
+        <button onClick={onClose}
+          style={{width:"100%",padding:"14px",borderRadius:12,
+            border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+            color:C.accent,fontSize:13,letterSpacing:2,textTransform:"uppercase",
+            cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Done</button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [module,setModule]=useState("play");
   const [importMsg,setImportMsg]=useState("");
@@ -1968,6 +2071,7 @@ function App() {
       {showSettings&&<SettingsModal
         lightMode={lightMode} setLightMode={setLightMode}
         module={module} setModule={v=>{setModule(v);setShowSettings(false);}}
+        importMsg={importMsg}
         onClose={()=>setShowSettings(false)}/>}
 
       {/* Module content */}
