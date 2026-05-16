@@ -47,8 +47,12 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <script type="text/babel">
- const { useState, useEffect } = React;
+  
+
+<script type="text/babel">
+
+
+    const { useState, useEffect } = React;
 
 const LS_ROUNDS = "golf_rounds_v1";
 const LS_PRACTICE = "golf_practice_v1";
@@ -66,6 +70,1869 @@ function clearAutosave() {
 function calcDifferential(score, rating, slope, holesPlayed) {
  if(!score||!rating||!slope) return null;
 
+ const adjScore = holesPlayed && holesPlayed < 18
+ ? Math.round(score * (18 / holesPlayed))
+ : score;
+ return Math.round(((adjScore - rating) * 113 / slope) * 10) / 10;
+}
+function calcHandicapIndex(rounds) {
+
+ const valid = rounds
+ .filter(r => r.courseRating && r.courseSlope && r.stats.score)
+ .map(r => calcDifferential(r.stats.score, r.courseRating, r.courseSlope))
+ .filter(d => d !== null)
+ .sort((a,b) => a-b);
+ if(valid.length < 3) return null;
+
+ const lookup = [[3,1],[4,1],[5,1],[6,2],[7,2],[8,2],[9,3],[10,3],
+ [11,3],[12,4],[13,4],[14,4],[15,5],[16,6],[17,6],[18,6],
+ [19,7],[20,8]];
+ const count = Math.min(valid.length, 20);
+ const use = (lookup.find(([n])=>n===count)||[20,8])[1];
+ const best = valid.slice(0, use);
+ return Math.round(avg(best) * 0.96 * 10) / 10;
+}
+
+const APP_VERSION = "v9.7";
+const APP_DATE = "5/14/26";
+const DEFAULT_PAR = [4,3,4,5,4,3,4,4,5, 4,4,3,5,4,3,4,5,4];
+const PRELOADED_COURSES=[{name:"Falconhead Golf Club",pars:[4,4,5,3,4,4,3,5,4,4,4,3,4,5,4,4,3,5],tees:[{label:"Black",color:"#111827",rating:75.7,slope:137},{label:"Blue",color:"#3b82f6",rating:72.5,slope:133},{label:"White",color:"#e5e7eb",rating:69.9,slope:124},{label:"Red",color:"#ef4444",rating:66.4,slope:118}]},{name:"Winged Foot - West",pars:[4,4,4,3,4,4,3,5,4,3,4,5,3,4,4,5,4,4],tees:[{label:"Blue",color:"#3b82f6",rating:76.4,slope:140},{label:"Black",color:"#111827",rating:74.3,slope:134},{label:"White",color:"#e5e7eb",rating:72.2,slope:132},{label:"Gold",color:"#eab308",rating:67.4,slope:124}]},{name:"Winged Foot - East",pars:[4,5,3,5,4,3,4,5,4,4,4,5,3,4,4,4,3,4],tees:[{label:"Blue",color:"#3b82f6",rating:73.6,slope:140},{label:"White",color:"#e5e7eb",rating:72.2,slope:136},{label:"Green",color:"#22c55e",rating:69.9,slope:131},{label:"Gold",color:"#eab308",rating:67.3,slope:124}]}];
+const SCORE_COLORS = {"-3":"#a855f7","-2":"#ec4899","-1":"#22c55e","0":"transparent","1":"#f59e0b","2":"#ef4444","3":"#7f1d1d"};
+const SCORE_BG = {"-3":"#a855f7","-2":"#ec4899","-1":"#22c55e","0":"#1e293b","1":"#f59e0b","2":"#ef4444","3":"#450a0a"};
+const SCORE_LABEL = {"-3":"Albatross","-2":"Eagle","-1":"Birdie","0":"Par","1":"Bogey","2":"Double","3":"Triple+"};
+const PRACTICE_CATS = [
+ {key:"four_foot", label:"4-Footers", emoji:"P", desc:"10 putts from 4 ft"},
+ {key:"lag", label:"Lag Putts", emoji:"L", desc:"10 lag putts"},
+ {key:"tee", label:"Off the Tee", emoji:"T", desc:"10 tee shots"},
+ {key:"approach", label:"Approach", emoji:"A", desc:"10 approach shots"},
+ {key:"chipping", label:"Chipping", emoji:"C", desc:"10 chip shots"},
+];
+const SHOTS = 10;
+const CLUBS = ["Driver","5 Wood","3 Hybrid","5i","6i","7i","8i","9i","43deg","48deg","52deg","58deg"];
+const CLUB_CATS = ["tee","approach"];
+
+function scoreDiff(s,p){ return s===null?null:Math.max(-3,Math.min(3,Number(s)-p)); }
+function pct(n,d){ return d>0?Math.round(n/d*100):null; }
+function fmtDate(iso){ return new Date(iso).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}); }
+function avg(a){ return a.length?a.reduce((x,y)=>x+y,0)/a.length:null; }
+const emptyHole = ()=>({score:null,gir:null,scramble:null,proximity:"",putts:null,shortPutt:null,notes:"",girStrokes:null,scrambleStrokes:null});
+
+function roundStats(holes,pars){
+ const played=holes.filter(h=>h.score!==null);
+ const holesPlayed=played.length;
+ const score=played.length?played.reduce((a,h)=>a+h.score,0):null;
+ const playedPar=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
+ const toPar=score!==null?score-playedPar:null;
+ const girHit=holes.filter(h=>h.gir===true).length;
+ const girTotal=holes.filter(h=>h.gir!==null).length;
+ const putts=holes.filter(h=>h.putts!==null).reduce((a,h)=>a+h.putts,0);
+ const puttsN=holes.filter(h=>h.putts!==null).length;
+ const missGIR=holes.filter(h=>h.gir===false&&h.scramble!==null);
+ const scrambled=missGIR.filter(h=>h.scramble===true).length;
+ const proxArr=holes.filter(h=>h.proximity!==""&&h.proximity!==null&&!isNaN(Number(h.proximity)));
+ const avgProx=proxArr.length?(proxArr.reduce((a,h)=>a+Number(h.proximity),0)/proxArr.length).toFixed(1):null;
+ const spData=holes.filter(h=>h.shortPutt!==null);
+ const spMade=spData.filter(h=>h.shortPutt===true).length;
+
+ const lostPutts=spData.filter(h=>h.shortPutt===false).length;
+ const lostScramble=missGIR.filter(h=>h.scramble===false).length;
+ const lostGIR=holes.filter(h=>h.gir===false).length;
+ const lostStrokes=lostPutts+lostScramble+lostGIR;
+ return {score,toPar,playedHoles:played.length,girHit,girTotal,putts,puttsN,
+ scrambled,scrambleTotal:missGIR.length,avgProx,spMade,spTotal:spData.length,
+ lostStrokes,lostPutts,lostScramble,lostGIR};
+}
+
+const DARK={bg:"#080d16",surface:"#0d1525",border:"#1a2540",subtle:"#0f1a2e",text:"#e8eef8",muted:"#4a5568",dim:"#2d3748",accent:"#f97316",accentD:"#ea6c0a",blue:"#3b82f6",green:"#22c55e",red:"#ef4444",purple:"#a855f7",pink:"#ec4899"};
+const LIGHT={bg:"#f0f4f8",surface:"#ffffff",border:"#cbd5e1",subtle:"#e8edf4",text:"#0f172a",muted:"#475569",dim:"#94a3b8",accent:"#ea6c0a",accentD:"#c2510a",blue:"#2563eb",green:"#16a34a",red:"#dc2626",purple:"#9333ea",pink:"#db2777"};
+const C={...DARK};
+function setTheme(light){const src=light?LIGHT:DARK;Object.keys(src).forEach(k=>{C[k]=src[k];});}
+
+
+function Pill({ active, onClick, children }) {
+ return (
+ <button onClick={onClick} style={{
+ padding:"7px 18px", borderRadius:20, border:"none", cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif", fontSize:16, letterSpacing:1.5,
+ textTransform:"uppercase", fontWeight:active?700:400,
+ background:active?C.accent:"transparent",
+ color:active?"#fff":C.muted,
+ transition:"all 0.18s",
+ }}>{children}</button>
+ );
+}
+
+function Tab({ active, onClick, children, badge }) {
+ return (
+ <button onClick={onClick} style={{
+ padding:"10px 16px", border:"none", cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif", fontSize:15, letterSpacing:2,
+ textTransform:"uppercase", fontWeight:active?700:400,
+ background:"transparent",
+ color:active?C.accent:C.muted,
+ borderBottom:active?`2px solid ${C.accent}`:"2px solid transparent",
+ transition:"all 0.15s", position:"relative",
+ }}>
+ {children}
+ {badge>0&&<span style={{marginLeft:5,fontSize:14,color:C.muted}}>({badge})</span>}
+ </button>
+ );
+}
+
+function Card({ children, style={} }) {
+ return (
+ <div style={{background:C.surface, border:`1px solid ${C.border}`,
+ borderRadius:14, overflow:"hidden", ...style}}>
+ {children}
+ </div>
+ );
+}
+
+function Num({ value, size=28, color=C.text, sub }) {
+ return (
+ <div style={{textAlign:"center"}}>
+ <div style={{fontFamily:"'Playfair Display',serif", fontSize:size,
+ fontWeight:900, color, lineHeight:1}}>{value??"--"}</div>
+ {sub&&<div style={{fontSize:12,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginTop:2}}>{sub}</div>}
+ </div>
+ );
+}
+
+function Sparkline({ data, color=C.accent, width=90, height=28 }) {
+ if(!data||data.length<2) return <span style={{fontSize:12,color:C.dim}}>--</span>;
+ const mn=Math.min(...data),mx=Math.max(...data),range=mx-mn||1;
+ const pts=data.map((v,i)=>`${(i/(data.length-1))*width},${height-((v-mn)/range)*(height-6)-3}`).join(" ");
+ return (
+ <svg width={width} height={height} style={{overflow:"visible"}}>
+ <polyline points={pts} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round"/>
+ {data.map((v,i)=>{
+ const x=(i/(data.length-1))*width,y=height-((v-mn)/range)*(height-6)-3;
+ return <circle key={i} cx={x} cy={y} r={i===data.length-1?3.5:2} fill={color}/>;
+ })}
+ </svg>
+ );
+}
+
+function ScoreCell({ score, par, onChange }) {
+ const d=scoreDiff(score,par);
+ const uc=C.accent; const oc=C.muted; const nc=C.dim;
+ const col=d===null?nc:d<0?uc:d===0?C.muted:oc;
+ const sz=34;
+ return (
+ <div style={{position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+ {d!=null&&d<=-2&&<div style={{position:"absolute",width:sz+2,height:sz+2,borderRadius:"50%",border:`2px solid ${uc}`,pointerEvents:"none"}}/>}
+ {d!=null&&d<=-1&&<div style={{position:"absolute",width:sz-6,height:sz-6,borderRadius:"50%",border:`2px solid ${uc}`,pointerEvents:"none"}}/>}
+ {d!=null&&d>=1&&!( d>=2)&&<div style={{position:"absolute",width:sz-4,height:sz-4,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+ {d!=null&&d>=2&&<div style={{position:"absolute",width:sz+2,height:sz+2,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+ {d!=null&&d>=2&&<div style={{position:"absolute",width:sz-6,height:sz-6,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+ {d!=null&&d>=3&&<div style={{position:"absolute",width:sz-13,height:sz-13,border:`2px solid ${oc}`,pointerEvents:"none"}}/>}
+ <input type="number" min="1" max="15" value={score===null?"":score}
+ onChange={e=>onChange(e.target.value===""?null:Number(e.target.value))}
+ style={{width:sz,height:sz,textAlign:"center",border:"none",outline:"none",
+ background:"transparent",color:col,fontFamily:"'Playfair Display',serif",
+ fontSize:15,fontWeight:700,borderRadius:0,
+ appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
+ </div>
+ );
+}
+
+function GIRDot({ value, onChange }) {
+ const bg=value===true?C.green:value===false?C.red:C.dim;
+ const label=value===true?"HIT":value===false?"MIS":"-";
+ return (
+ <button onClick={()=>onChange(value===null?true:value===true?false:null)}
+ style={{width:30,height:36,borderRadius:4,border:"none",background:bg,
+ color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:0.5,transition:"background 0.15s"}}>
+ {label}
+ </button>
+ );
+}
+
+function SPDot({ value, onChange }) {
+ const idx=value===null?0:value===true?1:2;
+ const bgs=[C.bg, C.blue+"33", C.red+"33"];
+ const cols=[C.dim, C.blue, C.red];
+ const borders=[C.border, C.blue, C.red];
+ const labels=["N/A","MADE","MISS"];
+ return (
+ <button onClick={()=>onChange(value===null?true:value===true?false:null)}
+ style={{width:40,height:34,borderRadius:5,border:`1px solid ${borders[idx]}`,
+ background:bgs[idx],color:cols[idx],fontSize:11,fontWeight:700,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:0.5,transition:"all 0.15s"}}>
+ {labels[idx]}
+ </button>
+ );
+}
+
+function GetDownDot({value,onChange}){const bg=value===true?C.green:value===false?C.red:C.dim;return(<button onClick={()=>onChange(value===null?true:value===true?false:null)} style={{width:44,height:38,borderRadius:5,border:"none",background:bg,color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"'Crimson Pro',serif",transition:"background 0.15s"}}>{value===null?"-":value===true?"YES":"NO"}</button>);}
+
+function MiniInput({ value, onChange, type="number", min, max, placeholder, width=34 }) {
+ return (
+ <input type={type} min={min} max={max} placeholder={placeholder}
+ value={value===null||value===undefined?"":value}
+ onChange={e=>onChange(e.target.value===""?null:type==="number"?Number(e.target.value):e.target.value)}
+ style={{width,height:34,textAlign:"center",border:`1px solid ${C.border}`,borderRadius:4,
+ outline:"none",background:C.bg,color:"#94a3b8",fontFamily:"'Crimson Pro',serif",
+ fontSize:14,appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none",padding:"0 2px"}}/>
+ );
+}
+
+function HBHStepper({ value, onChange, min=1, max=12, label }) {
+ return (
+ <div style={{display:"flex",flexDirection:"column",gap:5,width:"100%"}}>
+ <div style={{fontSize:12,letterSpacing:2.5,textTransform:"uppercase",
+ color:C.muted,fontFamily:"'Crimson Pro',serif",textAlign:"center"}}>{label}</div>
+ <div style={{display:"flex",width:"100%"}}>
+ <button onClick={()=>onChange(Math.max(min,(value||min)-1))}
+ style={{flex:1,height:74,borderRadius:"12px 0 0 12px",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:36,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center",
+ userSelect:"none",WebkitUserSelect:"none",transition:"background 0.1s"}}>-</button>
+ <div style={{flex:1.6,height:74,background:C.bg,
+ borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,
+ display:"flex",alignItems:"center",justifyContent:"center",
+ fontFamily:"'Playfair Display',serif",fontSize:41,fontWeight:900,color:C.text}}>
+ {value??"-"}
+ </div>
+ <button onClick={()=>onChange(Math.min(max,(value||0)+1))}
+ style={{flex:1,height:74,borderRadius:"0 12px 12px 0",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:36,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center",
+ userSelect:"none",WebkitUserSelect:"none",transition:"background 0.1s"}}>+</button>
+ </div>
+ </div>
+ );
+}
+
+function HBHToggle({ value, labels, onChange }) {
+ const idx=value===null?0:value===true?1:2;
+ const bgs=[C.bg,C.green+"33",C.red+"33"];
+ const cols=[C.dim,C.green,C.red];
+ const borders=[C.border,C.green,C.red];
+ return (
+ <button onClick={()=>onChange(value===null?true:value===true?false:null)}
+ style={{width:"100%",height:62,borderRadius:12,
+ border:`2px solid ${borders[idx]}`,background:bgs[idx],color:cols[idx],
+ fontSize:18,fontWeight:700,cursor:"pointer",transition:"all 0.15s",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:2,textTransform:"uppercase"}}>
+ {labels[idx]}
+ </button>
+ );
+}
+
+function HBHMini({ value, onChange, min=0, max=10, label }) {
+ return (
+ <div style={{display:"flex",flexDirection:"column",gap:5,width:"100%"}}>
+ {label&&<div style={{fontSize:12,letterSpacing:2.5,textTransform:"uppercase",
+ color:C.muted,fontFamily:"'Crimson Pro',serif",textAlign:"center"}}>{label}</div>}
+ <div style={{display:"flex",width:"100%"}}>
+ <button onClick={()=>onChange(Math.max(min,(value||0)-1))}
+ style={{flex:1,height:60,borderRadius:"10px 0 0 10px",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:29,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center",
+ userSelect:"none",WebkitUserSelect:"none"}}>-</button>
+ <div style={{flex:1.6,height:60,background:C.bg,
+ borderTop:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`,
+ display:"flex",alignItems:"center",justifyContent:"center",
+ fontFamily:"'Playfair Display',serif",fontSize:31,fontWeight:700,color:C.text}}>
+ {value??"-"}
+ </div>
+ <button onClick={()=>onChange(Math.min(max,(value||0)+1))}
+ style={{flex:1,height:60,borderRadius:"0 10px 10px 0",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:29,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center",
+ userSelect:"none",WebkitUserSelect:"none"}}>+</button>
+ </div>
+ </div>
+ );
+}
+
+function HoleNav({ holes, current, setCurrent }) {
+ return (
+ <div style={{padding:"8px 16px 16px"}}>
+ <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:5,marginBottom:5}}>
+ {Array.from({length:9},(_,i)=>{
+ const h=holes[i],active=current===i,done=h.score!==null;
+ return (
+ <button key={i} onClick={()=>setCurrent(i)} style={{
+ height:38,borderRadius:7,border:`1.5px solid ${active?C.accent:done?"#1e3a5f":C.border}`,
+ background:active?C.accent:done?"#0a1f3d":C.surface,
+ color:active?"#fff":done?C.blue:C.dim,
+ fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",
+ fontFamily:"'Playfair Display',serif"}}>{i+1}</button>
+ );
+ })}
+ </div>
+ <div style={{display:"grid",gridTemplateColumns:"repeat(9,1fr)",gap:5}}>
+ {Array.from({length:9},(_,i)=>{
+ const h=holes[i+9],active=current===i+9,done=h.score!==null;
+ return (
+ <button key={i+9} onClick={()=>setCurrent(i+9)} style={{
+ height:38,borderRadius:7,border:`1.5px solid ${active?C.accent:done?"#14532d":C.border}`,
+ background:active?C.accent:done?"#052e16":C.surface,
+ color:active?"#fff":done?C.green:C.dim,
+ fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s",
+ fontFamily:"'Playfair Display',serif"}}>{i+10}</button>
+ );
+ })}
+ </div>
+ </div>
+ );
+}
+
+function HoleView({ currentHole, setCurrentHole, holes, pars, updateHole, updateParSingle, onFinish, setMode }) {
+ const data=holes[currentHole],par=pars[currentHole];
+ const d=scoreDiff(data.score,par);
+ const bg=d!==null?SCORE_BG[String(d)]:C.subtle;
+ const label=d!==null?SCORE_LABEL[String(d)]:null;
+ const played=holes.slice(0,currentHole+1).filter(h=>h.score!==null);
+ const total=played.length?played.reduce((a,h)=>a+h.score,0):null;
+ const pp=holes.slice(0,currentHole+1).reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
+ const tp=total!==null?total-pp:null;
+ const isFirst=currentHole===0, isLast=currentHole===17;
+
+ return (
+ <div>
+ {}
+ <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+ gap:8,padding:"12px 16px",borderBottom:`1px solid ${C.border}`}}>
+ <div style={{display:"flex",alignItems:"baseline",gap:5,flexShrink:0}}>
+ <span style={{fontSize:11,letterSpacing:3,color:C.dim,textTransform:"uppercase",fontFamily:"'Crimson Pro',serif"}}>Hole</span>
+ <span style={{fontFamily:"'Playfair Display',serif",fontSize:50,fontWeight:900,
+ color:C.text,lineHeight:1}}>{currentHole+1}</span>
+ <span style={{fontSize:11,color:C.dim,fontFamily:"'Crimson Pro',serif"}}>/18</span>
+ </div>
+ <div style={{display:"flex",alignItems:"center",gap:4}}>
+ <span style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginRight:2}}>Par</span>
+ <button onClick={()=>updateParSingle(Math.max(3,par-1))}
+ style={{width:28,height:36,borderRadius:"7px 0 0 7px",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:19,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center"}}>-</button>
+ <div style={{width:32,height:36,background:C.bg,
+ borderTop:`1px solid ${C.blue}44`,borderBottom:`1px solid ${C.blue}44`,
+ display:"flex",alignItems:"center",justifyContent:"center",
+ fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.blue}}>{par}</div>
+ <button onClick={()=>updateParSingle(Math.min(6,par+1))}
+ style={{width:28,height:36,borderRadius:"0 7px 7px 0",border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:19,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+ </div>
+
+ {total!==null?(
+ <div style={{textAlign:"right",minWidth:48,flexShrink:0}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:900,
+ color:C.text,lineHeight:1}}>{total}</div>
+ <div style={{fontSize:13,fontFamily:"'Crimson Pro',serif",
+ color:tp<0?C.accent:tp===0?C.muted:C.red}}>
+ {tp>0?`+${tp}`:tp===0?"E":tp}
+ </div>
+ </div>
+ ):<div style={{minWidth:48}}/>}
+ </div>
+
+ {}
+ <div style={{padding:"12px 16px",display:"flex",flexDirection:"column",gap:10}}>
+ {}
+ <div style={{background:bg,borderRadius:14,padding:"14px 12px",
+ border:`1px solid ${C.border}`,transition:"background 0.3s"}}>
+ <HBHStepper value={data.score} min={1} max={12} label="Score"
+ onChange={v=>updateHole(currentHole,"score",v)}/>
+ {label&&<div style={{textAlign:"center",fontSize:13,letterSpacing:2,
+ textTransform:"uppercase",fontFamily:"'Playfair Display',serif",fontWeight:700,
+ color:d<0?"#fff":d===0?C.muted:C.red,marginTop:6}}>{label}</div>}
+ </div>
+ {}
+ <div style={{display:"flex",gap:10}}>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:14,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>GIR</div>
+ <HBHToggle value={data.gir} labels={["-","HIT","MIS"]}
+ onChange={v=>updateHole(currentHole,"gir",v)}/>
+ </div>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:14,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>Scrambling</div>
+ <HBHToggle value={data.scramble} labels={["-","YES","NO"]}
+ onChange={v=>updateHole(currentHole,"scramble",v)}/>
+ </div>
+ </div>
+ {}
+ <div style={{display:"flex",gap:10}}>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>GIR Strokes</div>
+ <HBHMini value={data.girStrokes} min={1} max={10} label={null}
+ onChange={v=>updateHole(currentHole,"girStrokes",v)}/>
+ </div>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>Scrambling Strokes</div>
+ <HBHMini value={data.scrambleStrokes} min={1} max={10} label={null}
+ onChange={v=>updateHole(currentHole,"scrambleStrokes",v)}/>
+ </div>
+ </div>
+ {}
+ <div style={{display:"flex",gap:10}}>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:14,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ fontFamily:"'Crimson Pro',serif",textAlign:"center"}}>Prox (ft)</div>
+ <input type="number" min="0" placeholder="--" value={data.proximity||""}
+ onChange={e=>updateHole(currentHole,"proximity",e.target.value)}
+ style={{height:70,width:"100%",textAlign:"center",border:`1px solid ${C.border}`,
+ borderRadius:12,background:C.bg,color:"#94a3b8",
+ fontFamily:"'Playfair Display',serif",fontSize:31,fontWeight:700,outline:"none",
+ appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
+ </div>
+ <div style={{flex:1,display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:14,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ textAlign:"center",fontFamily:"'Crimson Pro',serif"}}>{"<"}4ft Putt</div>
+ <HBHToggle value={data.shortPutt} labels={["N/A","MADE","MISS"]}
+ onChange={v=>updateHole(currentHole,"shortPutt",v)}/>
+ </div>
+ </div>
+ {}
+ <HBHStepper value={data.putts} min={0} max={6} label="Putts"
+ onChange={v=>updateHole(currentHole,"putts",v)}/>
+ {}
+ <div style={{display:"flex",flexDirection:"column",gap:5}}>
+ <div style={{fontSize:12,letterSpacing:2,textTransform:"uppercase",color:C.muted,
+ fontFamily:"'Crimson Pro',serif"}}>Notes</div>
+ <textarea placeholder="e.g. Pulled drive left..." value={data.notes||""}
+ onChange={e=>updateHole(currentHole,"notes",e.target.value)}
+ style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,
+ color:"#94a3b8",fontSize:17,padding:"10px 12px",outline:"none",resize:"none",
+ minHeight:60,boxSizing:"border-box",fontFamily:"'Crimson Pro',serif"}}/>
+ </div>
+ </div>
+
+ {}
+ <div style={{display:"flex",gap:10,padding:"8px 16px 10px"}}>
+ <button onClick={()=>setCurrentHole(c=>c-1)} disabled={isFirst}
+ style={{flex:1,height:58,borderRadius:12,border:`1px solid ${C.border}`,
+ background:isFirst?C.bg:C.surface,color:isFirst?C.border:C.muted,
+ fontSize:13,letterSpacing:2,textTransform:"uppercase",
+ cursor:isFirst?"default":"pointer",fontFamily:"'Crimson Pro',serif"}}>
+ Prev
+ </button>
+ <button onClick={isLast?onFinish:()=>setCurrentHole(c=>c+1)}
+ style={{flex:2,height:58,borderRadius:12,
+ border:`1px solid ${isLast?C.accent:C.border}`,
+ background:isLast?C.accent+"22":C.surface,
+ color:isLast?C.accent:C.text,fontSize:13,letterSpacing:2,
+ textTransform:"uppercase",cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+ {isLast?"Finish Round":"Next Hole"}
+ </button>
+ </div>
+
+ {}
+ <HoleNav holes={holes} current={currentHole} setCurrent={setCurrentHole}/>
+ </div>
+ );
+}
+
+function FinishScreen({ holes, pars, onDone }) {
+ const { useState:us, useEffect:ue } = React;
+ const [phase, setPhase] = us(0);
+ const played=holes.filter(h=>h.score!==null);
+ const holesPlayed=played.length;
+ const score=played.length?played.reduce((a,h)=>a+h.score,0):0;
+ const par=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
+ const d=score-par;
+ const col=d<0?C.accent:d===0?C.muted:C.red;
+ const stats=roundStats(holes,pars);
+ const notes=holes.map((h,i)=>h.notes?{hole:i+1,note:h.notes}:null).filter(Boolean);
+ ue(()=>{ const t=setTimeout(()=>setPhase(1),2200); return ()=>clearTimeout(t); },[]);
+ const SI=({v,l,sc})=>(
+ <div style={{textAlign:"center",minWidth:54,padding:"0 4px"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:sc||C.text}}>{v}</div>
+ <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",fontFamily:"'Crimson Pro',serif",marginTop:1}}>{l}</div>
+ </div>
+ );
+ return (
+ <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+ background:C.bg,zIndex:500,overflowY:"auto",animation:"fadeIn 0.4s ease"}}>
+ <style>{`@keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes popIn{from{transform:scale(0.5);opacity:0}to{transform:scale(1);opacity:1}}`}</style>
+ <div style={{display:"flex",flexDirection:"column",alignItems:"center",
+ padding:"40px 20px 30px",gap:14,minHeight:"100%"}}>
+ <div style={{fontSize:11,letterSpacing:4,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif"}}>{holesPlayed<18?holesPlayed+"-Hole Round":"Round Complete"}</div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:110,fontWeight:900,
+ lineHeight:1,color:col,animation:"popIn 0.5s 0.3s both"}}>{score}</div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:32,color:col,
+ animation:"popIn 0.4s 0.6s both"}}>{d>0?`+${d}`:d===0?"Even":d}</div>
+ <div style={{display:"flex",flexWrap:"wrap",gap:4,justifyContent:"center",
+ marginTop:4,animation:"fadeIn 0.4s 0.9s both",
+ background:C.surface,borderRadius:16,padding:"14px 16px",
+ border:`1px solid ${C.border}`,width:"100%",maxWidth:420}}>
+ <SI v={stats.girTotal?`${stats.girHit}/${stats.girTotal}`:"--"} l="GIR"/>
+ <SI v={stats.scrambleTotal?`${stats.scrambled}/${stats.scrambleTotal}`:"--"} l="Scrambling"/>
+ <SI v={stats.puttsN?stats.putts:"--"} l="Putts"/>
+ <SI v={stats.spTotal?`${stats.spMade}/${stats.spTotal}`:"--"} l="<4ft"/>
+ <SI v={stats.lostStrokes||0} l="Lost" sc={stats.lostStrokes>0?C.red:C.muted}/>
+ <SI v={stats.avgProx?stats.avgProx+"ft":"--"} l="Avg Prox"/>
+ </div>
+ {notes.length>0&&(
+ <div style={{width:"100%",maxWidth:420,animation:"fadeIn 0.4s 1.2s both"}}>
+ <div style={{fontSize:10,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:10}}>Opportunities</div>
+ <div style={{display:"flex",flexDirection:"column",gap:8}}>
+ {notes.map(({hole,note})=>(
+ <div key={hole} style={{background:C.surface,border:`1px solid ${C.border}`,
+ borderRadius:10,padding:"10px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+ <span style={{fontSize:10,color:C.accent,fontWeight:700,
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1,flexShrink:0,paddingTop:1}}>H{hole}</span>
+ <span style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",
+ fontStyle:"italic",lineHeight:1.4}}>{note}</span>
+ </div>
+ ))}
+ </div>
+ </div>
+ )}
+ {phase===1&&(
+ <button onClick={onDone}
+ style={{marginTop:8,padding:"14px 40px",borderRadius:14,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:16,letterSpacing:2,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700,
+ animation:"popIn 0.3s both"}}>Start New Round</button>
+ )}
+ </div>
+ </div>
+ );
+}
+
+function getTH(){return{padding:"10px 3px",fontSize:16,letterSpacing:2,textTransform:"uppercase",color:C.muted,fontFamily:"'Crimson Pro',serif",fontWeight:600,textAlign:"center",borderBottom:`1px solid ${C.border}`,background:C.surface};}
+function getTD(){return{padding:"6px 2px",textAlign:"center",fontFamily:"'Playfair Display',serif",fontSize:19,background:C.surface};}
+
+function CardView({ holes, pars, updateHole, setPars, currentHole, jumpToHole }) {
+ const played=holes.filter(h=>h.score!==null).length;
+ const total=played?holes.filter(h=>h.score!==null).reduce((a,h)=>a+h.score,0):null;
+ const pp=holes.reduce((a,h,i)=>h.score!==null?a+pars[i]:a,0);
+ const tp=total!==null?total-pp:null;
+ const gir=holes.filter(h=>h.gir===true).length;
+ const girN=holes.filter(h=>h.gir!==null).length;
+ const putts=holes.filter(h=>h.putts!==null).reduce((a,h)=>a+h.putts,0);
+ const puttsN=holes.filter(h=>h.putts!==null).length;
+
+ const renderNine=(start)=>{
+ const ns=holes.slice(start,start+9).filter(h=>h.score!==null).reduce((a,h)=>a+h.score,0);
+ const nsp=holes.slice(start,start+9).some(h=>h.score!==null)?ns:null;
+ const np=pars.slice(start,start+9).reduce((a,b)=>a+b,0);
+ const npp=holes.slice(start,start+9).reduce((a,h,i)=>h.score!==null?a+pars[start+i]:a,0);
+ const nd=nsp!==null?nsp-npp:null;
+ const rows=[
+ {key:"score",label:"Score",
+ render:(i)=><ScoreCell score={holes[start+i].score} par={pars[start+i]} onChange={v=>updateHole(start+i,"score",v)}/>,
+ total:()=>nsp!==null?(<span style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+ {nsp}{nd!==null&&<span style={{fontSize:12,color:nd<0?C.accent:nd===0?C.muted:C.red,marginLeft:3}}>{nd>0?`+${nd}`:nd}</span>}
+ </span>):"--"},
+ {key:"gir",label:"GIR",
+ render:(i)=><GIRDot value={holes[start+i].gir} onChange={v=>updateHole(start+i,"gir",v)}/>,
+ total:()=>{const h=holes.slice(start,start+9);const n=h.filter(x=>x.gir!==null).length;return n?`${h.filter(x=>x.gir===true).length}/${n}`:"--";}},
+ {key:"scramble",label:"Scrambling",
+ render:(i)=><GetDownDot value={holes[start+i].scramble} onChange={v=>updateHole(start+i,"scramble",v)}/>,
+ total:()=>{const h=holes.slice(start,start+9);const n=h.filter(x=>x.scramble!==null).length;return n?`${h.filter(x=>x.scramble===true).length}/${n}`:"--";}},
+ {key:"prox",label:"Prox",
+ render:(i)=><MiniInput value={holes[start+i].proximity} type="text" placeholder="--" width={36} onChange={v=>updateHole(start+i,"proximity",v)}/>,
+ total:()=>""},
+ {key:"sp",label:"<4ft",
+ render:(i)=><SPDot value={holes[start+i].shortPutt} onChange={v=>updateHole(start+i,"shortPutt",v)}/>,
+ total:()=>{const h=holes.slice(start,start+9).filter(x=>x.shortPutt!==null);return h.length?`${h.filter(x=>x.shortPutt===true).length}/${h.length}`:"--";}},
+ {key:"putts",label:"Putts",
+ render:(i)=><MiniInput value={holes[start+i].putts} min={0} max={6} onChange={v=>updateHole(start+i,"putts",v)}/>,
+ total:()=>{const h=holes.slice(start,start+9).filter(x=>x.putts!==null);return h.length?h.reduce((a,x)=>a+x.putts,0):"--";}},
+ ];
+ return (
+ <div style={{overflowX:"auto"}}>
+ <table style={{borderCollapse:"collapse",width:"100%",minWidth:520}}>
+ <thead>
+ <tr>
+ <th style={{...getTH(),textAlign:"left",paddingLeft:12,width:72}}>Metric</th>
+ {Array.from({length:9},(_,i)=>(
+ <th key={i} style={{...getTH(),width:42,color:currentHole===start+i?C.accent:C.muted,
+ cursor:"pointer"}} onClick={()=>jumpToHole(start+i)}>{start+i+1}</th>
+ ))}
+ <th style={{...getTH(),color:C.accent,width:50}}>Out</th>
+ </tr>
+ <tr>
+ <td style={{...getTD(),textAlign:"left",paddingLeft:12,color:C.muted,fontSize:12}}>Par</td>
+ {pars.slice(start,start+9).map((p,i)=>(
+ <td key={i} style={{...getTD(),padding:"2px"}}>
+ <input type="number" min="3" max="6" value={p}
+ onChange={e=>{const np=[...pars];np[start+i]=Number(e.target.value)||p;setPars(np);}}
+ style={{width:30,height:26,textAlign:"center",border:`1px solid ${C.blue}44`,borderRadius:3,
+ background:C.bg,color:C.blue,fontFamily:"'Crimson Pro',serif",fontSize:13,
+ appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none",outline:"none"}}/>
+ </td>
+ ))}
+ <td style={{...getTD(),color:C.accent,fontWeight:700,fontSize:16}}>{np}</td>
+ </tr>
+ </thead>
+ <tbody>
+ {rows.map(row=>(
+ <tr key={row.key} style={{borderTop:`1px solid ${C.bg}`}}>
+ <td style={{...getTD(),textAlign:"left",paddingLeft:12,color:C.muted,
+ fontSize:12,letterSpacing:1,textTransform:"uppercase"}}>{row.label}</td>
+ {Array.from({length:9},(_,i)=>(
+ <td key={i} style={{...getTD(),padding:"4px 2px"}}>
+ <div style={{display:"flex",justifyContent:"center"}}>{row.render(i)}</div>
+ </td>
+ ))}
+ <td style={{...getTD(),fontWeight:700,color:C.text,fontSize:16}}>{row.total()}</td>
+ </tr>
+ ))}
+ </tbody>
+ </table>
+ </div>
+ );
+ };
+
+ return (
+ <div>
+ {}
+ {(()=>{
+
+ const holesLeft=holes.reduce((a,h,i)=>h.score===null?[...a,i]:[...a],[]);
+ const isBackNine=holesLeft.length>0&&holesLeft[0]>=9;
+ const targetHole=isBackNine?17:8;
+ const remainingInNine=holes.slice(0,targetHole+1).filter(h=>h.score===null);
+ const bogeyRemain=remainingInNine.reduce((a,h,i)=>{
+ const hIdx=holes.indexOf(h);
+ return a+pars[hIdx]+1;
+ },0);
+ const estFinish=total!==null&&remainingInNine.length>0?total+bogeyRemain:null;
+ const estLabel=isBackNine?"Est/18":"Est/9";
+ const gdN=holes.filter(h=>h.scramble!==null).length;
+ const gdHit=holes.filter(h=>h.scramble===true).length;
+ const lostPutts=holes.filter(h=>h.shortPutt===false).length;
+ const lostScr=holes.filter(h=>h.gir===false&&h.scramble===false).length;
+ const lostGIR=holes.filter(h=>h.gir===false).length;
+ const lostStrokes=lostPutts+lostScr+lostGIR;
+ const D=()=><div style={{width:1,background:C.border,alignSelf:"stretch",margin:"0 5px"}}/>;
+ return(
+ <div style={{display:"flex",padding:"14px 16px",gap:2,overflowX:"auto",
+ borderBottom:`1px solid ${C.border}`,alignItems:"center"}}>
+ <Num value={total??"-"} size={26} color={C.text} sub="Score"/>
+ <D/>
+ <Num value={tp!==null?(tp>0?`+${tp}`:tp===0?"E":String(tp)):"-"} size={26}
+ color={tp!==null&&tp<0?C.accent:tp===0?C.muted:C.red} sub="To Par"/>
+ <D/>
+ <Num value={estFinish??"-"} size={19} color={C.muted} sub={estLabel||"Est Finish"}/>
+ <D/>
+ <Num value={girN?`${gir}/${girN}`:"-"} size={19} color={C.text} sub="GIR"/>
+ <D/>
+ <Num value={gdN?`${gdHit}/${gdN}`:"-"} size={19} color={C.text} sub="Scrambling"/>
+ <D/>
+ <Num value={puttsN?putts:"-"} size={19} color={C.text} sub="Putts"/>
+ <D/>
+ <Num value={lostStrokes} size={19} color={lostStrokes>0?C.red:C.muted} sub="Lost"/>
+ <div style={{flex:1}}/>
+ </div>
+ );
+ })()}
+ {}
+ <div style={{padding:"14px 10px 0"}}>
+ <div style={{fontSize:11,letterSpacing:3,color:C.dim,textTransform:"uppercase",
+ paddingLeft:6,marginBottom:4,fontFamily:"'Crimson Pro',serif"}}>Front Nine</div>
+ <Card style={{marginBottom:14}}>{renderNine(0)}</Card>
+ <div style={{fontSize:11,letterSpacing:3,color:C.dim,textTransform:"uppercase",
+ paddingLeft:6,marginBottom:4,fontFamily:"'Crimson Pro',serif"}}>Back Nine</div>
+ <Card>{renderNine(9)}</Card>
+ </div>
+ </div>
+ );
+}
+
+function CourseModal({onConfirm,onClose}){
+ const saved=load(LS_COURSES);
+ const all=[...PRELOADED_COURSES,...saved.filter(s=>!PRELOADED_COURSES.find(p=>p.name===s.name))];
+ const [search,setSearch]=useState(""); const [picked,setPicked]=useState(null);
+ const [mn,setMn]=useState(""); const [mr,setMr]=useState(""); const [ms,setMs]=useState("");
+ const filtered=all.filter(c=>c.name.toLowerCase().includes(search.toLowerCase()));
+ const doConfirm=(name,rating,slope,pars)=>{
+ if(rating&&slope){const ex=saved.filter(c=>c.name!==name);save(LS_COURSES,[{name,rating,slope},...ex].slice(0,50));}
+ onConfirm({name,rating:rating||null,slope:slope||null,pars:pars||null});
+ };
+ const sheet=(body)=>(
+ <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+ <div style={{background:C.surface,borderRadius:"20px 20px 0 0",padding:"20px 20px 44px",width:"100%",maxWidth:520,border:`1px solid ${C.border}`,borderBottom:"none"}} onClick={e=>e.stopPropagation()}>
+ <div style={{width:40,height:5,borderRadius:2,background:C.border,margin:"0 auto 18px"}}/>
+ {body}
+ </div>
+ </div>
+ );
+ if(picked) return sheet(
+ <div>
+ <button onClick={()=>setPicked(null)} style={{fontSize:13,color:C.muted,background:"transparent",border:"none",cursor:"pointer",marginBottom:8,fontFamily:"'Crimson Pro',serif"}}>Back</button>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.text,marginBottom:4}}>{picked.name}</div>
+ <div style={{fontSize:13,color:C.muted,marginBottom:14,fontFamily:"'Crimson Pro',serif"}}>Par {picked.pars.reduce((a,b)=>a+b,0)} - Select tees</div>
+ <div style={{display:"flex",flexDirection:"column",gap:8}}>
+ {picked.tees.map(t=>(
+ <button key={t.label} onClick={()=>doConfirm(picked.name+" ("+t.label+")",t.rating,t.slope,picked.pars)} style={{padding:"14px 16px",borderRadius:12,border:`2px solid ${t.color}44`,background:t.color+"11",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+ <div style={{display:"flex",alignItems:"center",gap:10}}>
+ <div style={{width:14,height:17,borderRadius:"50%",background:t.color,border:t.label==="White"?`1px solid ${C.border}`:"none"}}/>
+ <span style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:700,color:C.text}}>{t.label}</span>
+ </div>
+ <div style={{textAlign:"right"}}><div style={{fontSize:16,color:C.text,fontWeight:600}}>Rating {t.rating}</div><div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif"}}>Slope {t.slope}</div></div>
+ </button>
+ ))}
+ </div>
+ </div>
+ );
+ return sheet(
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.text,marginBottom:12}}>Select Course</div>
+ <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search courses..." style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,color:C.text,padding:"10px 14px",fontSize:18,fontFamily:"'Crimson Pro',serif",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
+ <div style={{display:"flex",flexDirection:"column",gap:6,maxHeight:240,overflowY:"auto",marginBottom:14}}>
+ {filtered.map(c=>(
+ <div key={c.name} onClick={()=>c.tees?setPicked(c):doConfirm(c.name,c.rating,c.slope,c.pars||null)} style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${C.border}`,background:C.bg,cursor:"pointer"}}>
+ <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>{c.name}</div>
+ <div style={{display:"flex",gap:4}}>{(c.tees||[]).map(t=>(<div key={t.label} style={{width:10,height:12,borderRadius:"50%",background:t.color,border:t.label==="White"?`1px solid ${C.border}`:"none"}}/>))}</div>
+ </div>
+ {c.pars&&<div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif"}}>Par {c.pars.reduce((a,b)=>a+b,0)} - {c.pars.slice(0,9).join("-")} | {c.pars.slice(9).join("-")}</div>}
+ </div>
+ ))}
+ </div>
+ <div style={{borderTop:`1px solid ${C.border}`,paddingTop:12}}>
+ <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",fontFamily:"'Crimson Pro',serif",marginBottom:8}}>Or enter new course</div>
+ <input value={mn} onChange={e=>setMn(e.target.value)} placeholder="Course name" style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,padding:"8px 12px",fontSize:17,fontFamily:"'Crimson Pro',serif",outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+ <div style={{display:"flex",gap:8,marginBottom:10}}>
+ <input type="number" step="0.1" value={mr} onChange={e=>setMr(e.target.value)} placeholder="Rating e.g. 71.4" style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,padding:"8px 12px",fontSize:16,fontFamily:"'Crimson Pro',serif",outline:"none",appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
+ <input type="number" value={ms} onChange={e=>setMs(e.target.value)} placeholder="Slope e.g. 128" style={{flex:1,background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,padding:"8px 12px",fontSize:16,fontFamily:"'Crimson Pro',serif",outline:"none",appearance:"textfield",MozAppearance:"textfield",WebkitAppearance:"none"}}/>
+ </div>
+ <button onClick={()=>{if(mn.trim())doConfirm(mn.trim(),Number(mr)||null,Number(ms)||null,null);}} style={{width:"100%",padding:"11px",borderRadius:10,border:`1.5px solid ${mn.trim()?C.accent:C.border}`,background:mn.trim()?C.accent+"22":"transparent",color:mn.trim()?C.accent:C.dim,fontSize:14,letterSpacing:1.5,textTransform:"uppercase",cursor:mn.trim()?"pointer":"default",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Add Course</button>
+ </div>
+ </div>
+ );
+}
+
+function DifficultyModal({ girCriteria, setGirCriteria, scrambleCriteria, setScrambleCriteria, onClose }) {
+ return (
+ <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+ background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+ alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+ <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+ padding:"20px 20px 44px",width:"100%",maxWidth:520,
+ border:`1px solid ${C.border}`,borderBottom:"none"}}
+ onClick={e=>e.stopPropagation()}>
+ <div style={{width:40,height:5,borderRadius:2,background:C.border,margin:"0 auto 18px"}}/>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,
+ color:C.text,marginBottom:4}}>Round Difficulty</div>
+ <div style={{fontSize:14,color:C.muted,fontFamily:"'Crimson Pro',serif",marginBottom:20}}>
+ Your personal GIR zone and scrambling standard
+ </div>
+ <div style={{marginBottom:20}}>
+ <div style={{fontSize:13,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:10}}>GIR Zone</div>
+ <div style={{display:"flex",flexDirection:"column",gap:8}}>
+ {[
+ ["Green","On the green in regulation - traditional"],
+ ["25yds","Within 25 yards in regulation"],
+ ["50yds","Within 50 yards in regulation"],
+ ["100yds","Within 100 yards in regulation"],
+ ].map(([opt,desc])=>(
+ <button key={opt} onClick={()=>setGirCriteria(opt)}
+ style={{padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+ border:`2px solid ${girCriteria===opt?C.green:C.border}`,
+ background:girCriteria===opt?C.green+"11":"transparent",
+ display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+ color:girCriteria===opt?C.green:C.text}}>{opt}</div>
+ <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>{desc}</div>
+ </div>
+ {girCriteria===opt&&<div style={{width:10,height:12,borderRadius:"50%",
+ background:C.green,flexShrink:0}}/>}
+ </button>
+ ))}
+ </div>
+ </div>
+ <div style={{marginBottom:20}}>
+ <div style={{fontSize:13,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:10}}>Scrambling Standard</div>
+ <div style={{display:"flex",gap:10}}>
+ {[[2,"2 shots","Traditional up and down"],[3,"3 shots","Bogey golfer standard"]].map(([opt,label,desc])=>(
+ <button key={opt} onClick={()=>setScrambleCriteria(opt)}
+ style={{flex:1,padding:"12px 14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+ border:`2px solid ${scrambleCriteria===opt?C.accent:C.border}`,
+ background:scrambleCriteria===opt?C.accent+"11":"transparent"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+ color:scrambleCriteria===opt?C.accent:C.text}}>{label}</div>
+ <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>{desc}</div>
+ </button>
+ ))}
+ </div>
+ </div>
+ <button onClick={onClose}
+ style={{width:"100%",padding:"13px",borderRadius:12,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:16,letterSpacing:2,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Done</button>
+ </div>
+ </div>
+ );
+}
+
+const exportData=()=>{
+ const data={exported:new Date().toISOString(),rounds:load(LS_ROUNDS),practice:load(LS_PRACTICE)};
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement("a");
+ a.href=url; a.download="gallo-card-backup-"+new Date().toISOString().slice(0,10)+".json"; a.click();
+ URL.revokeObjectURL(url);
+};
+
+const importData=(e)=>{
+ const file=e.target.files[0]; if(!file) return;
+ const reader=new FileReader();
+ reader.onload=(ev)=>{
+ try{
+ const data=JSON.parse(ev.target.result);
+ if(data.rounds) save(LS_ROUNDS,data.rounds);
+ if(data.practice) save(LS_PRACTICE,data.practice);
+ alert("Recovered! Reload the page to see your data.");
+ } catch{alert("Invalid backup file.");}
+ };
+ reader.readAsText(file); e.target.value="";
+};
+
+function PlayModule({ mode, setMode, hbhDone, setHbhDone, curHole, setCurHole }) {
+ const [tab, setTab] = useState("card");
+ const [showFinish, setShowFinish] = useState(false);
+ const [showDiffModal, setShowDiffModal] = useState(false);
+ const [confirmNR, setConfirmNR] = useState(false);
+ const [girCriteria, setGirCriteria] = useState("100yds");
+ const [scrambleCriteria, setScrambleCriteria] = useState(3);
+ const [holes, setHoles] = useState(Array(18).fill(null).map(emptyHole));
+ const [pars, setPars] = useState([...DEFAULT_PAR]);
+ const [course, setCourse] = useState({name:"",rating:null,slope:null,pars:null});
+ const [showCourseModal, setShowCourseModal] = useState(false);
+ const [rounds, setRounds] = useState(()=>load(LS_ROUNDS));
+ const [selId, setSelId] = useState(null);
+ const [msg, setMsg] = useState("");
+ const [editingId, setEditingId] = useState(null);
+ const [resumeBanner, setResumeBanner] = useState(()=>loadAutosave());
+
+ const updateHole=(i,f,v)=>{const n=[...holes];n[i]={...n[i],[f]:v};setHoles(n);};
+
+
+ useEffect(()=>{
+ const hasData = holes.some(h=>h.score!==null);
+ if(hasData){
+ const autosave = {holes,pars,course,curHole,mode,savedAt:new Date().toISOString(),editingId};
+ try { localStorage.setItem(LS_AUTOSAVE, JSON.stringify(autosave)); } catch {}
+ }
+ },[holes,pars,course,curHole,mode]);
+ const updateParSingle=(v)=>{const n=[...pars];n[curHole]=v;setPars(n);};
+
+ const reset=()=>{
+ setHoles(Array(18).fill(null).map(emptyHole));
+ setPars([...DEFAULT_PAR]);
+ setCourse({name:"",rating:null,slope:null,pars:null});
+ setMsg(""); setCurHole(0); setHbhDone(false); setMode("card");
+ setEditingId(null); setResumeBanner(null);
+ clearAutosave(); setConfirmNR(false);
+ setGirCriteria("100yds"); setScrambleCriteria(3);
+ };
+
+ const resumeRound=()=>{
+ const as=resumeBanner;
+ if(!as) return;
+ setHoles(as.holes);
+ setPars(as.pars||[...DEFAULT_PAR]);
+ setCourse(as.course||{name:"",rating:null,slope:null});
+ setCurHole(as.curHole||0);
+ setMode(as.mode||"card");
+ setEditingId(as.editingId||null);
+ setResumeBanner(null);
+ };
+
+ const discardAutosave=()=>{
+ setResumeBanner(null);
+ clearAutosave();
+ };
+
+ const editRound=(round)=>{
+ setHoles(round.holes);
+ setPars(round.pars||[...DEFAULT_PAR]);
+ setCourse({name:round.courseName||"",rating:round.courseRating||null,slope:round.courseSlope||null});
+ setCurHole(0); setHbhDone(false); setMode("card");
+ setEditingId(round.id);
+ setSelId(null); setTab("card");
+ setResumeBanner(null); clearAutosave();
+ };
+
+ const saveRound=()=>{
+ const stats=roundStats(holes,pars);
+ if(stats.playedHoles===0){setMsg("No scores yet.");setTimeout(()=>setMsg(""),3000);return;}
+ const diff=calcDifferential(stats.score,course.rating,course.slope,stats.playedHoles);
+
+ if(course.name&&course.rating){const sc=load(LS_COURSES);const ex=sc.filter(s=>s.name!==course.name);save(LS_COURSES,[{...course,pars:[...pars]},...ex].slice(0,50));}
+ let updated;
+ if(editingId){
+
+ updated=rounds.map(r=>r.id===editingId
+ ?{...r,courseName:course.name,courseRating:course.rating,courseSlope:course.slope,
+ differential:diff,holes,pars,stats,girCriteria,scrambleCriteria,updatedAt:new Date().toISOString()}
+ :r);
+ setMsg("Round updated!"); setTimeout(()=>setMsg(""),3000);
+ } else {
+ const r={id:Date.now().toString(),date:new Date().toISOString(),
+ courseName:course.name,courseRating:course.rating,courseSlope:course.slope,
+ differential:diff,holes,pars,stats,girCriteria,scrambleCriteria,
+ holesPlayed:stats.playedHoles};
+ updated=[r,...rounds];
+ setMsg("Round archived!"); setTimeout(()=>setMsg(""),3000);
+ }
+ setRounds(updated);save(LS_ROUNDS,updated);
+ setEditingId(null);
+ clearAutosave();
+ };
+
+ const deleteRound=(id)=>{
+ const u=rounds.filter(r=>r.id!==id);setRounds(u);save(LS_ROUNDS,u);
+ if(selId===id)setSelId(null);
+ };
+
+ const jumpToHole=(i)=>{setCurHole(i);setMode("hole");};
+
+ return (
+ <div>
+ {}
+ {mode!=="hole"&&<div style={{display:"flex",borderBottom:`1px solid ${C.border}`,paddingLeft:8,overflowX:"auto"}}>
+ <Tab active={tab==="card"} onClick={()=>setTab("card")}>Scorecard</Tab>
+ <Tab active={tab==="archive"} onClick={()=>{setTab("archive");setSelId(null);}} badge={rounds.length}>Archive</Tab>
+ <Tab active={tab==="analysis"} onClick={()=>setTab("analysis")}>Analysis</Tab>
+ </div>}
+
+ {}
+ {tab==="card"&&(
+ <>
+ {}
+ {resumeBanner&&(
+ <div style={{background:"#1a2f1a",border:`1px solid ${C.green}`,borderRadius:12,
+ margin:"12px 16px 0",padding:"12px 14px",display:"flex",
+ alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,
+ color:C.green}}>Unfinished Round Found</div>
+ <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+ {resumeBanner.course?.name||"Unnamed course"} - saved {fmtDate(resumeBanner.savedAt)}
+ </div>
+ </div>
+ <div style={{display:"flex",gap:8,flexShrink:0}}>
+ <button onClick={resumeRound}
+ style={{padding:"7px 14px",borderRadius:8,border:`1.5px solid ${C.green}`,
+ background:C.green+"22",color:C.green,fontSize:13,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
+ fontWeight:700}}>Resume</button>
+ <button onClick={discardAutosave}
+ style={{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:13,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Discard</button>
+ </div>
+ </div>
+ )}
+ {}
+ {editingId&&(
+ <div style={{background:C.surface,border:`1px solid ${C.blue}`,borderRadius:12,
+ margin:"12px 16px 0",padding:"10px 14px",display:"flex",
+ alignItems:"center",justifyContent:"space-between"}}>
+ <div style={{fontSize:13,color:C.blue,fontFamily:"'Crimson Pro',serif",flex:1}}>
+ Editing archived round - Finish Round to update, New Round to cancel
+ </div>
+ <button onClick={reset}
+ style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:12,letterSpacing:1,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>
+ Cancel
+ </button>
+ </div>
+ )}
+ {}
+ {mode!=="hole"&&<>
+ <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",
+ borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}>
+ {}
+ <button onClick={()=>setShowCourseModal(true)}
+ style={{flex:"1 1 100px",minWidth:80,background:C.bg,border:`1px solid ${C.border}`,
+ borderRadius:8,color:course.name?C.text:C.muted,padding:"7px 12px",fontSize:16,
+ fontFamily:"'Crimson Pro',serif",textAlign:"left",cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+ <span>{course.name||"Tap to set course..."}</span>
+ {course.rating&&<span style={{fontSize:12,color:C.muted,marginLeft:6}}>
+ {course.rating} / {course.slope}
+ </span>}
+ </button>
+ {}
+ <button onClick={()=>setShowDiffModal(true)}
+ style={{flexShrink:0,background:C.bg,border:`1px solid ${C.border}`,
+ borderRadius:8,padding:"7px 10px",fontSize:13,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",display:"flex",alignItems:"center",gap:4,
+ color:girCriteria!=="100yds"||scrambleCriteria!==3?C.accent:C.muted}}>
+ <span style={{fontSize:14}}>&#9881;</span>
+ <span>{girCriteria} / {scrambleCriteria}sh</span>
+ </button>
+
+ {msg&&<span style={{fontSize:14,color:C.green,fontFamily:"'Crimson Pro',serif"}}>{msg}</span>}
+ </div>
+ {showCourseModal&&<CourseModal
+ onConfirm={(c)=>{setCourse(c);if(c.pars)setPars([...c.pars]);setShowCourseModal(false);}}
+ onClose={()=>setShowCourseModal(false)}/>}
+ {showDiffModal&&<DifficultyModal
+ girCriteria={girCriteria} setGirCriteria={setGirCriteria}
+ scrambleCriteria={scrambleCriteria} setScrambleCriteria={setScrambleCriteria}
+ onClose={()=>setShowDiffModal(false)}/>}
+
+ </>
+ }
+
+ {}
+ {mode==="hole"&&(
+ <HoleView currentHole={curHole} setCurrentHole={setCurHole}
+ holes={holes} pars={pars} updateHole={updateHole}
+ updateParSingle={updateParSingle} onFinish={()=>setShowFinish(true)} setMode={setMode}/>
+ )}
+
+ {}
+ {showFinish&&<FinishScreen holes={holes} pars={pars}
+ onDone={()=>{saveRound();reset();setShowFinish(false);}}/>}
+
+ {}
+ {mode==="card"&&<CardView holes={holes} pars={pars}
+ updateHole={updateHole} setPars={setPars}
+ currentHole={curHole} jumpToHole={jumpToHole}/>}
+
+ {}
+ {mode==="card"&&(
+ <div style={{display:"flex",gap:10,padding:"12px 16px",
+ borderTop:`1px solid ${C.border}`,background:C.surface,
+ position:"sticky",bottom:0}}>
+ <button onClick={()=>setShowFinish(true)}
+ style={{flex:2,padding:"13px",borderRadius:12,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:16,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Finish Round</button>
+ {confirmNR?(
+ <div style={{flex:1,display:"flex",gap:6}}>
+ <button onClick={()=>{reset();setConfirmNR(false);}}
+ style={{flex:1,padding:"13px",borderRadius:12,
+ border:`1.5px solid ${C.red}`,background:C.red+"22",
+ color:C.red,fontSize:14,letterSpacing:1,
+ textTransform:"uppercase",cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Confirm</button>
+ <button onClick={()=>setConfirmNR(false)}
+ style={{flex:1,padding:"13px",borderRadius:12,
+ border:`1px solid ${C.border}`,background:"transparent",
+ color:C.muted,fontSize:14,letterSpacing:1,
+ textTransform:"uppercase",cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Cancel</button>
+ </div>
+ ):(
+ <button onClick={()=>setConfirmNR(true)}
+ style={{flex:1,padding:"13px",borderRadius:12,
+ border:`1px solid ${C.border}`,background:"transparent",
+ color:C.muted,fontSize:16,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>New Round</button>
+ )}
+ </div>
+ )}
+ {}
+ {mode==="card"&&(
+ <div style={{display:"flex",gap:8,padding:"8px 16px 0",
+ justifyContent:"flex-end"}}>
+ <button onClick={exportData}
+ style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.blue}44`,
+ background:C.blue+"11",color:C.blue,fontSize:11,letterSpacing:1,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>
+ Backup</button>
+ <label style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:11,letterSpacing:1,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",
+ display:"block"}}>
+ Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+ </label>
+
+ </div>
+ )}
+ </>
+ )}
+
+ {}
+ {tab==="archive"&&(
+ selId?(
+ <RoundDetail round={rounds.find(r=>r.id===selId)} onClose={()=>setSelId(null)} onEdit={editRound}/>
+ ):(
+ <div style={{padding:"14px 14px"}}>
+ {rounds.length===0
+ ?<div style={{textAlign:"center",padding:"60px 0",color:C.dim,
+ fontFamily:"'Crimson Pro',serif",fontSize:17}}>No rounds saved yet.</div>
+ :rounds.map(r=><RoundCard key={r.id} round={r} onDelete={deleteRound} onSelect={setSelId}/>)
+ }
+ </div>
+ )
+ )}
+
+ {}
+ {tab==="analysis"&&<PlayAnalysis rounds={rounds}/>}
+ </div>
+ );
+}
+
+function RoundCard({ round, onDelete, onSelect }) {
+ const s=round.stats;
+ const col=s.toPar<0?C.accent:s.toPar===0?C.muted:C.red;
+ return (
+ <div onClick={()=>onSelect(round.id)}
+ style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+ padding:"14px 16px",cursor:"pointer",marginBottom:10,transition:"border-color 0.15s"}}>
+ <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:19,fontWeight:700,color:C.text}}>
+ {round.courseName||"Unnamed Course"}</div>
+ <div style={{fontSize:13,color:C.muted,marginTop:2,fontFamily:"'Crimson Pro',serif"}}>
+ {fmtDate(round.date)}
+ {round.courseRating&&<span style={{marginLeft:6,color:C.dim}}>
+ {round.courseRating} / {round.courseSlope}
+ </span>}
+ </div>
+ {(round.girCriteria||round.scrambleCriteria)&&(
+ <div style={{marginTop:3,display:"flex",gap:6}}>
+ {round.girCriteria&&<span style={{fontSize:11,color:C.green,background:C.green+"11",
+ border:`1px solid ${C.green}33`,borderRadius:10,padding:"1px 6px",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>GIR {round.girCriteria}</span>}
+ {round.scrambleCriteria&&<span style={{fontSize:11,color:C.accent,background:C.accent+"11",
+ border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 6px",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>Scr {round.scrambleCriteria} shots</span>}
+ </div>
+ )}
+ </div>
+ <div style={{display:"flex",alignItems:"center",gap:10}}>
+ <div style={{textAlign:"right"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:31,fontWeight:900,color:col,lineHeight:1}}>
+ {s.score??"--"}</div>
+ <div style={{fontSize:13,color:col,fontFamily:"'Crimson Pro',serif"}}>
+ {s.toPar!==null?(s.toPar>0?`+${s.toPar}`:s.toPar===0?"E":s.toPar):"--"}</div>
+ {round.differential!==null&&round.differential!==undefined&&(
+ <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:1}}>
+ diff {round.differential}
+ </div>
+ )}
+ </div>
+ <button onClick={e=>{e.stopPropagation();onDelete(round.id);}}
+ style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.dim,fontSize:13,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Del</button>
+ </div>
+ </div>
+ <div style={{display:"flex",gap:14,marginTop:10,flexWrap:"wrap"}}>
+ {[["GIR",s.girTotal?`${s.girHit}/${s.girTotal}`:"--"],
+ ["Scrambling",s.scrambleTotal?`${s.scrambled}/${s.scrambleTotal}`:"--"],
+ ["Putts",s.puttsN?s.putts:"--"],["Prox",s.avgProx?s.avgProx+"ft":"--"],
+ ["<4ft",pct(s.spMade,s.spTotal)!==null?pct(s.spMade,s.spTotal)+"%":"--"],
+ ].map(([l,v])=>(
+ <div key={l} style={{textAlign:"center"}}>
+ <div style={{fontSize:11,color:C.dim,letterSpacing:1,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif"}}>{l}</div>
+ <div style={{fontSize:16,fontWeight:700,color:"#94a3b8",
+ fontFamily:"'Playfair Display',serif"}}>{v}</div>
+ </div>
+ ))}
+ </div>
+ </div>
+ );
+}
+
+function RoundDetail({ round, onClose, onEdit }) {
+ const s=round.stats,holes=round.holes,pars=round.pars||DEFAULT_PAR;
+ return (
+ <div style={{padding:"14px"}}>
+ <div style={{display:"flex",gap:8,marginBottom:14}}>
+ <button onClick={onClose} style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:14,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Back</button>
+ {onEdit&&<button onClick={()=>onEdit(round)}
+ style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.blue}`,
+ background:C.blue+"11",color:C.blue,fontSize:14,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1,textTransform:"uppercase"}}>
+ Edit Round
+ </button>}
+ </div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:900,color:C.text}}>
+ {round.courseName||"Unnamed Course"}</div>
+ <div style={{fontSize:13,color:C.muted,marginBottom:8,fontFamily:"'Crimson Pro',serif"}}>
+ {fmtDate(round.date)}
+ {round.courseRating&&(
+ <span style={{marginLeft:8,color:C.dim}}>
+ Rating {round.courseRating} / Slope {round.courseSlope}
+ {round.differential!==null&&round.differential!==undefined&&
+ <span style={{marginLeft:8,color:C.accent}}>Diff {round.differential}</span>}
+ </span>
+ )}
+ </div>
+ <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+ {round.holesPlayed&&round.holesPlayed<18&&(
+ <span style={{fontSize:10,color:C.blue,background:C.blue+"11",
+ border:`1px solid ${C.blue}33`,borderRadius:10,padding:"2px 8px",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>
+ {round.holesPlayed} of 18 holes
+ </span>
+ )}
+ {round.girCriteria&&<span style={{fontSize:10,color:C.green,background:C.green+"11",
+ border:`1px solid ${C.green}33`,borderRadius:10,padding:"2px 8px",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>GIR Zone: {round.girCriteria}</span>}
+ {round.scrambleCriteria&&<span style={{fontSize:10,color:C.accent,background:C.accent+"11",
+ border:`1px solid ${C.accent}33`,borderRadius:10,padding:"2px 8px",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>Scramble: {round.scrambleCriteria} shots</span>}
+ </div>
+ <div style={{display:"flex",gap:4,padding:"10px 0",borderTop:`1px solid ${C.border}`,
+ borderBottom:`1px solid ${C.border}`,flexWrap:"wrap",marginBottom:14}}>
+ {[["Score",s.score],["To Par",s.toPar!==null?(s.toPar>0?`+${s.toPar}`:s.toPar===0?"E":s.toPar):"--"],
+ ["GIR",s.girTotal?`${s.girHit}/${s.girTotal}`:"--"],
+ ["Scrambling",s.scrambleTotal?`${s.scrambled}/${s.scrambleTotal}`:"--"],
+ ["Putts",s.puttsN?s.putts:"--"],["Prox",s.avgProx?s.avgProx+"ft":"--"],
+ ["<4ft",s.spTotal?`${s.spMade}/${s.spTotal}`:"--"],
+ ].map(([l,v],i,arr)=>(
+ <React.Fragment key={l}>
+ <div style={{textAlign:"center",minWidth:54,padding:"0 4px"}}>
+ <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:2}}>{l}</div>
+ <div style={{fontSize:22,fontWeight:700,fontFamily:"'Playfair Display',serif",
+ color:l==="To Par"&&s.toPar<0?C.accent:l==="To Par"&&s.toPar>0?C.red:C.text}}>{v??"--"}</div>
+ </div>
+ {(i===1||i===3||i===5)&&<div style={{width:1,background:C.border,alignSelf:"stretch",margin:"0 2px"}}/>}
+ </React.Fragment>
+ ))}
+ </div>
+ <div style={{overflowX:"auto"}}>
+ <table style={{borderCollapse:"collapse",width:"100%",minWidth:560}}>
+ <thead>
+ <tr>{["#","Par","Score","GIR","G.Str","Down","S.Str","Prox","Putts","<4ft","Notes"].map(h=>(
+ <th key={h} style={{...getTH(),fontSize:12}}>{h}</th>
+ ))}</tr>
+ </thead>
+ <tbody>
+ {holes.map((h,i)=>{ if(h.score===null) return null;
+ const d=scoreDiff(h.score,pars[i]);
+ const borderCol=d===-3?C.purple:d===-2?C.pink:d===-1?C.accent:d===1?C.muted:d===2?C.red:d===3?"#450a0a":null;
+ const isCircle=d!==null&&d<=-1;
+ const isDouble=d!==null&&d<=-2;
+ const isSquare=d!==null&&d>=1;
+ const isDoubleSquare=d!==null&&d>=2;
+ return (
+ <React.Fragment key={i}>
+ <tr style={{borderTop:`1px solid ${C.border}`}}>
+ <td style={{...getTD(),color:C.muted,fontSize:14}}>{i+1}</td>
+ <td style={{...getTD(),color:C.blue,fontSize:14}}>{pars[i]}</td>
+ <td style={{...getTD()}}>
+ <div style={{position:"relative",display:"inline-flex",alignItems:"center",justifyContent:"center",width:28,height:28}}>
+ {isDouble&&<div style={{position:"absolute",width:28,height:34,borderRadius:"50%",border:`2px solid ${borderCol}`}}/>}
+ {isCircle&&<div style={{position:"absolute",width:20,height:24,borderRadius:"50%",border:`2px solid ${borderCol}`}}/>}
+ {isDoubleSquare&&<div style={{position:"absolute",width:28,height:34,border:`2px solid ${borderCol}`}}/>}
+ {isSquare&&!isDoubleSquare&&<div style={{position:"absolute",width:20,height:24,border:`2px solid ${borderCol}`}}/>}
+ <span style={{color:borderCol||C.muted,fontWeight:700,fontSize:14,position:"relative"}}>{h.score??"-"}</span>
+ </div>
+ </td>
+ <td style={{...getTD()}}><span style={{color:h.gir===true?C.green:h.gir===false?C.red:C.muted,fontWeight:700,fontSize:12}}>{h.gir===true?"HIT":h.gir===false?"MIS":"-"}</span></td>
+ <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.girStrokes??"-"}</td>
+ <td style={{...getTD()}}><span style={{color:h.scramble===true?C.green:h.scramble===false?C.red:C.muted,fontWeight:700,fontSize:12}}>{h.scramble===true?"YES":h.scramble===false?"NO":"-"}</span></td>
+ <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.scrambleStrokes??"-"}</td>
+ <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.proximity||"-"}</td>
+ <td style={{...getTD(),color:C.muted,fontSize:14}}>{h.putts??"-"}</td>
+ <td style={{...getTD()}}><span style={{color:h.shortPutt===true?C.blue:h.shortPutt===false?C.red:C.muted,fontWeight:700,fontSize:12}}>{h.shortPutt===true?"MADE":h.shortPutt===false?"MISS":"N/A"}</span></td>
+ <td style={{...getTD(),textAlign:"left",fontSize:11,color:C.muted,fontStyle:"italic",fontFamily:"'Crimson Pro',serif",maxWidth:120,paddingLeft:8}}>{h.notes||""}</td>
+ </tr>
+ {h.notes&&<tr style={{borderTop:"none"}}>
+ <td colSpan={10} style={{...getTD(),textAlign:"left",paddingLeft:12,paddingBottom:6,fontSize:13,color:C.muted,fontStyle:"italic",fontFamily:"'Crimson Pro',serif"}}>{h.notes}</td>
+ </tr>}
+ </React.Fragment>
+ );
+ })}
+ </tbody>
+ </table>
+ </div>
+ </div>
+ );
+}
+
+function PlayAnalysis({ rounds }) {
+ if(rounds.length<2) return (
+ <div style={{textAlign:"center",padding:"60px 24px",color:C.dim,
+ fontFamily:"'Crimson Pro',serif",fontSize:17}}>Save at least 2 rounds to see trends.</div>
+ );
+ const sorted=[...rounds].sort((a,b)=>new Date(a.date)-new Date(b.date));
+ const scores=sorted.map(r=>r.stats.score).filter(v=>v!==null);
+ const girP=sorted.map(r=>pct(r.stats.girHit,r.stats.girTotal)).filter(v=>v!==null);
+ const puttsT=sorted.map(r=>r.stats.puttsN>0?r.stats.putts:null).filter(v=>v!==null);
+ const scrP=sorted.map(r=>pct(r.stats.scrambled,r.stats.scrambleTotal)).filter(v=>v!==null);
+ const spP=sorted.map(r=>pct(r.stats.spMade,r.stats.spTotal)).filter(v=>v!==null);
+
+ const TrendCard=({label,data,higherBetter=true,suffix=""})=>{
+ const t=data.length>=2?data[data.length-1]-data[0]:null;
+ const a=avg(data);
+ const good=higherBetter?t<=0:t>=0;
+ const tc=t===null?C.muted:t===0?C.muted:good?C.green:C.red;
+ return (
+ <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+ padding:"14px 16px",flex:"1 1 140px"}}>
+ <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:8}}>{label}</div>
+ <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,fontWeight:700,color:C.text}}>
+ {a!==null?a.toFixed(1)+suffix:"--"}</div>
+ {t!==null&&<div style={{fontSize:12,color:tc,marginTop:3,fontFamily:"'Crimson Pro',serif"}}>
+ {good?"Improving":"Declining"} ({t>0?"+":""}{t.toFixed(1)}{suffix})</div>}
+ </div>
+ <Sparkline data={data} color={tc===C.muted?C.dim:tc}/>
+ </div>
+ </div>
+ );
+ };
+ return (
+ <div style={{padding:"16px"}}>
+ <div style={{fontSize:11,color:C.dim,letterSpacing:3,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:12}}>{sorted.length} rounds</div>
+ <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+ <TrendCard label="Score" data={scores} higherBetter={false}/>
+ <TrendCard label="GIR %" data={girP} suffix="%"/>
+ <TrendCard label="Total Putts" data={puttsT} higherBetter={false}/>
+ <TrendCard label="Scramble %" data={scrP} suffix="%"/>
+ <TrendCard label="Short Putt %" data={spP} suffix="%"/>
+ </div>
+ </div>
+ );
+}
+
+function ShotButton({ value, index, onChange }) {
+ const bg=value===true?C.green+"33":value===false?C.red+"33":C.surface;
+ const col=value===true?C.green:value===false?C.red:C.dim;
+ const border=value===true?C.green:value===false?C.red:C.border;
+ return (
+ <button onClick={()=>onChange(value===null?true:value===true?false:null)}
+ style={{height:62,borderRadius:10,border:`1.5px solid ${border}`,background:bg,
+ color:col,fontSize:16,fontWeight:700,cursor:"pointer",transition:"all 0.12s",
+ fontFamily:"'Crimson Pro',serif",letterSpacing:1}}>
+ {value===null?index+1:value===true?"HIT":"MIS"}
+ </button>
+ );
+}
+
+function PracticeSession({ catKey, club, onSave, onCancel }) {
+ const cat=PRACTICE_CATS.find(c=>c.key===catKey);
+ const [shots,setShots]=useState(Array(SHOTS).fill(null));
+ const [notes,setNotes]=useState("");
+ const setShot=(i,v)=>{const n=[...shots];n[i]=v;setShots(n);};
+ const hits=shots.filter(s=>s===true).length;
+ const misses=shots.filter(s=>s===false).length;
+ const logged=shots.filter(s=>s!==null).length;
+ const hp=pct(hits,logged);
+ const col=hp!==null&&hp>=70?C.green:hp!==null&&hp>=50?C.accent:C.red;
+
+ return (
+ <div style={{padding:"16px",maxWidth:480,margin:"0 auto"}}>
+ <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:18}}>
+ <div style={{width:44,height:53,borderRadius:12,background:C.bg,border:`1px solid ${C.border}`,
+ display:"flex",alignItems:"center",justifyContent:"center",
+ fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:C.accent}}>
+ {cat.emoji}
+ </div>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:C.text}}>{cat.label}</div>
+ <div style={{fontSize:13,color:C.muted,fontFamily:"'Crimson Pro',serif"}}>{cat.desc}</div>
+ </div>
+ </div>
+ <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>
+ {shots.map((s,i)=><ShotButton key={i} value={s} index={i} onChange={v=>setShot(i,v)}/>)}
+ </div>
+ <Card style={{padding:"12px 14px",marginBottom:14}}>
+ <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+ <span style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif"}}>Progress</span>
+ <span style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:col}}>
+ {logged>0?`${hits}/${logged} (${hp}%)`:"Tap shots to log"}
+ </span>
+ </div>
+ <div style={{height:6,background:C.border,borderRadius:3,overflow:"hidden"}}>
+ <div style={{height:"100%",borderRadius:3,transition:"width 0.2s",background:col,
+ width:`${logged>0?(hits/SHOTS)*100:0}%`}}/>
+ </div>
+ <div style={{display:"flex",justifyContent:"space-between",marginTop:6,fontSize:12,
+ fontFamily:"'Crimson Pro',serif"}}>
+ <span style={{color:C.green}}>{hits} hits</span>
+ <span style={{color:C.dim}}>{SHOTS-logged} left</span>
+ <span style={{color:C.red}}>{misses} misses</span>
+ </div>
+ </Card>
+ <textarea placeholder="Notes (optional)..." value={notes}
+ onChange={e=>setNotes(e.target.value)}
+ style={{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+ color:"#94a3b8",fontFamily:"'Crimson Pro',serif",fontSize:16,padding:"10px 12px",
+ outline:"none",resize:"vertical",minHeight:56,boxSizing:"border-box",marginBottom:12}}/>
+ <div style={{display:"flex",gap:10}}>
+ <button onClick={()=>{if(logged>0)onSave({id:Date.now().toString(),date:new Date().toISOString(),
+ category:catKey,shots,notes,hits,misses,logged});}}
+ disabled={logged===0}
+ style={{flex:1,padding:"10px",borderRadius:10,
+ border:`1.5px solid ${logged>0?C.accent:C.border}`,
+ background:logged>0?C.accent+"22":"transparent",
+ color:logged>0?C.accent:C.dim,fontSize:14,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:logged===0?"default":"pointer",
+ fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Save</button>
+ <button onClick={onCancel}
+ style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:14,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Cancel</button>
+ </div>
+ </div>
+ );
+}
+
+function PracticeModule() {
+ const [history,setHistory]=useState(()=>load(LS_PRACTICE));
+ const [active,setActive]=useState(null);
+ const [drill,setDrill]=useState(null);
+ const [logCat,setLogCat]=useState(null);
+
+ const saveSession=(s)=>{
+ const u=[s,...history];
+ setHistory(u);save(LS_PRACTICE,u);setActive(null);
+ };
+ const deleteSession=(id)=>{
+ const u=history.filter(s=>s.id!==id);
+ setHistory(u);save(LS_PRACTICE,u);
+ };
+
+
+ if(active) return <PracticeSession catKey={active.catKey} club={active.club}
+ onSave={saveSession} onCancel={()=>setActive(null)}/>;
+
+
+ if(drill&&drill.club!==undefined) {
+ const sessions=history.filter(s=>s.category===drill.catKey&&s.club===drill.club);
+ const cat=PRACTICE_CATS.find(c=>c.key===drill.catKey);
+ return (
+ <div style={{padding:"14px"}}>
+ <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+ <button onClick={()=>setDrill({catKey:drill.catKey})}
+ style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Back</button>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+ {cat.label} - {drill.club}
+ </div>
+ <button onClick={()=>setActive({catKey:drill.catKey,club:drill.club})}
+ style={{marginLeft:"auto",padding:"8px 16px",borderRadius:10,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:12,letterSpacing:1,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>+ Log</button>
+ </div>
+ {sessions.length===0?(
+ <div style={{textAlign:"center",padding:"40px 0",color:C.dim,fontFamily:"'Crimson Pro',serif",fontSize:16}}>
+ No sessions yet for {drill.club}
+ </div>
+ ):(
+ <div style={{display:"flex",flexDirection:"column",gap:10}}>
+ {[...sessions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+ const p=Math.round(s.hits/s.logged*100);
+ const col=p>=70?C.green:p>=50?C.muted:C.red;
+ return (
+ <div key={s.id} style={{background:C.surface,border:`1px solid ${C.border}`,
+ borderRadius:12,padding:"12px 14px"}}>
+ <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+ <div style={{fontFamily:"'Crimson Pro',serif",fontSize:13,color:C.muted}}>
+ {fmtDate(s.date)}</div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:col}}>
+ {s.hits}/{s.logged}</div>
+ </div>
+ {s.notes&&<div style={{fontSize:12,color:C.muted,fontStyle:"italic",
+ fontFamily:"'Crimson Pro',serif",marginTop:4}}>{s.notes}</div>}
+ <button onClick={()=>deleteSession(s.id)}
+ style={{marginTop:6,padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.dim,fontSize:10,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Delete</button>
+ </div>
+ );
+ })}
+ </div>
+ )}
+ </div>
+ );
+ }
+
+
+ if(drill) {
+ const cat=PRACTICE_CATS.find(c=>c.key===drill.catKey);
+ const isClubCat=CLUB_CATS.includes(drill.catKey);
+ const catSessions=history.filter(s=>s.category===drill.catKey);
+
+ if(isClubCat) {
+
+ return (
+ <div style={{padding:"14px"}}>
+ <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+ <button onClick={()=>setDrill(null)}
+ style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Back</button>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+ {cat.label}</div>
+ </div>
+ <div style={{display:"flex",flexDirection:"column",gap:10}}>
+ {CLUBS.map(club=>{
+ const clubSessions=catSessions.filter(s=>s.club===club);
+ if(clubSessions.length===0) return null;
+ const totalHits=clubSessions.reduce((a,s)=>a+s.hits,0);
+ const totalLogged=clubSessions.reduce((a,s)=>a+s.logged,0);
+ const pct=Math.round(totalHits/totalLogged*100);
+ const col=pct>=70?C.green:pct>=50?C.muted:C.red;
+ return (
+ <div key={club} onClick={()=>setDrill({catKey:drill.catKey,club})}
+ style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+ padding:"14px 16px",cursor:"pointer",display:"flex",
+ justifyContent:"space-between",alignItems:"center"}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+ color:C.text}}>{club}</div>
+ <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+ {clubSessions.length} session{clubSessions.length!==1?"s":""}
+ </div>
+ </div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,color:col}}>
+ {pct}%
+ </div>
+ </div>
+ );
+ }).filter(Boolean)}
+ {CLUBS.every(club=>catSessions.filter(s=>s.club===club).length===0)&&(
+ <div style={{textAlign:"center",padding:"40px 0",color:C.dim,
+ fontFamily:"'Crimson Pro',serif",fontSize:16}}>No sessions yet</div>
+ )}
+ <button onClick={()=>setActive({catKey:drill.catKey})}
+ style={{padding:"13px",borderRadius:12,border:`1.5px solid ${C.accent}`,
+ background:C.accent+"22",color:C.accent,fontSize:13,letterSpacing:1.5,
+ textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+ + Log Session
+ </button>
+ </div>
+ </div>
+ );
+ }
+
+
+ return (
+ <div style={{padding:"14px"}}>
+ <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+ <button onClick={()=>setDrill(null)}
+ style={{padding:"6px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.muted,fontSize:12,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Back</button>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+ {cat.label}</div>
+ <button onClick={()=>setActive({catKey:drill.catKey})}
+ style={{marginLeft:"auto",padding:"8px 16px",borderRadius:10,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:12,letterSpacing:1,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>+ Log</button>
+ </div>
+ {catSessions.length===0?(
+ <div style={{textAlign:"center",padding:"40px 0",color:C.dim,
+ fontFamily:"'Crimson Pro',serif",fontSize:16}}>No sessions yet</div>
+ ):(
+ <div style={{display:"flex",flexDirection:"column",gap:10}}>
+ {[...catSessions].sort((a,b)=>new Date(b.date)-new Date(a.date)).map(s=>{
+ const p=Math.round(s.hits/s.logged*100);
+ const col=p>=70?C.green:p>=50?C.muted:C.red;
+ return (
+ <div key={s.id} style={{background:C.surface,border:`1px solid ${C.border}`,
+ borderRadius:12,padding:"12px 14px"}}>
+ <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+ <div style={{fontFamily:"'Crimson Pro',serif",fontSize:13,color:C.muted}}>
+ {fmtDate(s.date)}</div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:col}}>
+ {s.hits}/{s.logged}</div>
+ </div>
+ {s.notes&&<div style={{fontSize:12,color:C.muted,fontStyle:"italic",
+ fontFamily:"'Crimson Pro',serif",marginTop:4}}>{s.notes}</div>}
+ <button onClick={()=>deleteSession(s.id)}
+ style={{marginTop:6,padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,
+ background:"transparent",color:C.dim,fontSize:10,cursor:"pointer",
+ fontFamily:"'Crimson Pro',serif"}}>Delete</button>
+ </div>
+ );
+ })}
+ </div>
+ )}
+ </div>
+ );
+ }
+
+
+ return (
+ <div style={{padding:"14px"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,
+ color:C.text,marginBottom:4}}>Practice History</div>
+ <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginBottom:16}}>
+ Tap a category to drill in
+ </div>
+ <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:16}}>
+ {PRACTICE_CATS.map(cat=>{
+ const sessions=history.filter(s=>s.category===cat.key);
+ const totalHits=sessions.reduce((a,s)=>a+s.hits,0);
+ const totalLogged=sessions.reduce((a,s)=>a+s.logged,0);
+ const pct=totalLogged?Math.round(totalHits/totalLogged*100):null;
+ const col=pct===null?C.dim:pct>=70?C.green:pct>=50?C.muted:C.red;
+ const recent=sessions.sort((a,b)=>new Date(b.date)-new Date(a.date))[0];
+ return (
+ <div key={cat.key} onClick={()=>setDrill({catKey:cat.key})}
+ style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+ padding:"14px 16px",cursor:"pointer",display:"flex",
+ justifyContent:"space-between",alignItems:"center"}}>
+ <div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:700,
+ color:C.text}}>{cat.label}</div>
+ <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+ {sessions.length} session{sessions.length!==1?"s":""}
+ {recent?" - last "+fmtDate(recent.date):""}
+ </div>
+ </div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,fontWeight:700,color:col}}>
+ {pct!==null?pct+"%":"--"}
+ </div>
+ </div>
+ );
+ })}
+ </div>
+ <button onClick={()=>setLogCat("choose")}
+ style={{width:"100%",padding:"13px",borderRadius:12,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:13,letterSpacing:1.5,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>
+ + Log Session
+ </button>
+ {}
+ {logCat==="choose"&&(
+ <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+ background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+ alignItems:"flex-end",justifyContent:"center"}}
+ onClick={()=>setLogCat(null)}>
+ <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+ padding:"20px 20px 44px",width:"100%",maxWidth:520,
+ border:`1px solid ${C.border}`,borderBottom:"none"}}
+ onClick={e=>e.stopPropagation()}>
+ <div style={{width:40,height:4,borderRadius:2,background:C.border,margin:"0 auto 16px"}}/>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,
+ color:C.text,marginBottom:14}}>Choose Category</div>
+ <div style={{display:"flex",flexDirection:"column",gap:8}}>
+ {PRACTICE_CATS.map(cat=>(
+ <button key={cat.key} onClick={()=>{setLogCat(null);setActive({catKey:cat.key});}}
+ style={{padding:"13px 16px",borderRadius:12,border:`1px solid ${C.border}`,
+ background:C.bg,cursor:"pointer",textAlign:"left",
+ fontFamily:"'Playfair Display',serif",fontSize:15,fontWeight:700,color:C.text}}>
+ {cat.label}
+ <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+ fontWeight:400,marginTop:2}}>{cat.desc}</div>
+ </button>
+ ))}
+ </div>
+ </div>
+ </div>
+ )}
+ </div>
+ );
+}
+
+function PillToggle({ options, value, onChange }) {
+ const idx = options.findIndex(o=>String(o.value)===String(value));
+ return (
+ <div style={{position:"relative",display:"flex",background:C.bg,
+ borderRadius:20,border:`1px solid ${C.border}`,padding:2,gap:0}}>
+ <div style={{
+ position:"absolute",top:2,bottom:2,borderRadius:18,
+ background:C.surface,border:`1px solid ${C.border}`,
+ width:`calc(${100/options.length}% - 2px)`,
+ transform:`translateX(calc(${idx*100}% + ${idx*2}px))`,
+ transition:"transform 0.25s cubic-bezier(0.34,1.56,0.64,1)",
+ boxShadow:"0 1px 4px rgba(0,0,0,0.2)",
+ pointerEvents:"none"
+ }}/>
+ {options.map((opt,i)=>(
+ <button key={String(opt.value)} onClick={()=>onChange(opt.value)}
+ style={{flex:1,padding:"12px 22px",borderRadius:20,border:"none",
+ cursor:"pointer",background:"transparent",position:"relative",zIndex:1,
+ color:String(value)===String(opt.value)?C.accent:C.muted,
+ fontSize:13,fontWeight:String(value)===String(opt.value)?700:400,
+ letterSpacing:1.5,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",
+ transition:"color 0.2s ease",whiteSpace:"nowrap"}}>
+ {opt.label}
+ </button>
+ ))}
+ </div>
+ );
+}
+
+function SettingsModal({ lightMode, setLightMode, module, setModule, importMsg, onClose }) {
+ return (
+ <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,
+ background:"rgba(0,0,0,0.75)",zIndex:1000,display:"flex",
+ alignItems:"flex-end",justifyContent:"center"}} onClick={onClose}>
+ <div style={{background:C.surface,borderRadius:"20px 20px 0 0",
+ padding:"20px 20px 44px",width:"100%",maxWidth:520,
+ border:`1px solid ${C.border}`,borderBottom:"none"}}
+ onClick={e=>e.stopPropagation()}>
+ <div style={{width:40,height:4,borderRadius:2,background:C.border,margin:"0 auto 20px"}}/>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:700,
+ color:C.text,marginBottom:20}}>Settings</div>
+ <div style={{marginBottom:20}}>
+ <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Mode</div>
+ <div style={{display:"flex",gap:10}}>
+ {[["play","Play","Score your round"],["practice","Practice","Log practice sessions"]].map(([k,label,desc])=>(
+ <button key={k} onClick={()=>setModule(k)}
+ style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+ border:`2px solid ${module===k?C.accent:C.border}`,
+ background:module===k?C.accent+"11":"transparent"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+ color:module===k?C.accent:C.text}}>{label}</div>
+ <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+ marginTop:3}}>{desc}</div>
+ </button>
+ ))}
+ </div>
+ </div>
+ <div style={{marginBottom:20}}>
+ <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Theme</div>
+ <div style={{display:"flex",gap:10}}>
+ {[[false,"Dark","Easy on the eyes"],[true,"Light","Bright display"]].map(([val,label,desc])=>(
+ <button key={String(val)} onClick={()=>setLightMode(val)}
+ style={{flex:1,padding:"14px",borderRadius:12,cursor:"pointer",textAlign:"left",
+ border:`2px solid ${lightMode===val?C.blue:C.border}`,
+ background:lightMode===val?C.blue+"11":"transparent"}}>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,
+ color:lightMode===val?C.blue:C.text}}>{label}</div>
+ <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",
+ marginTop:3}}>{desc}</div>
+ </button>
+ ))}
+ </div>
+ </div>
+ <div style={{marginBottom:20}}>
+ <div style={{fontSize:11,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:12}}>Data</div>
+ <div style={{display:"flex",gap:10}}>
+ <button onClick={exportData}
+ style={{flex:1,padding:"12px",borderRadius:12,cursor:"pointer",textAlign:"center",
+ border:`1px solid ${C.blue}44`,background:C.blue+"11",color:C.blue,
+ fontFamily:"'Crimson Pro',serif",fontSize:13,fontWeight:700}}>Backup</button>
+ <label style={{flex:1,padding:"12px",borderRadius:12,cursor:"pointer",textAlign:"center",
+ border:`1px solid ${C.border}`,background:"transparent",color:C.muted,
+ fontFamily:"'Crimson Pro',serif",fontSize:13,display:"block"}}>
+ Recover<input type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+ </label>
+ </div>
+ {importMsg&&<div style={{fontSize:11,color:C.green,textAlign:"center",marginTop:6,
+ fontFamily:"'Crimson Pro',serif"}}>{importMsg}</div>}
+ </div>
+ <button onClick={onClose}
+ style={{width:"100%",padding:"14px",borderRadius:12,
+ border:`1.5px solid ${C.accent}`,background:C.accent+"22",
+ color:C.accent,fontSize:13,letterSpacing:2,textTransform:"uppercase",
+ cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>Done</button>
+ </div>
+ </div>
+ );
+}
+
+function App() {
+ const [module,setModule]=useState("play");
+ const [importMsg,setImportMsg]=useState("");
+ const [lightMode,setLightMode]=useState(true);
+ const [mode,setMode]=useState("card");
+ const [hbhDone,setHbhDone]=useState(false);
+ const [curHole,setCurHole]=useState(0);
+ const [showSettings,setShowSettings]=useState(false);
+ setTheme(lightMode);
+
+ return (
+ <div style={{minHeight:"100vh",background:C.bg,
+ fontFamily:"'Crimson Pro',serif",color:C.text}}>
+
+ {}
+ <div style={{background:C.bg,borderBottom:`1px solid ${C.border}`,
+ padding:"16px 20px 0",paddingTop:"max(16px, env(safe-area-inset-top))"}}>
+ {}
+ <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+ marginBottom:12,gap:12}}>
+ {}
+ {(()=>{
+ const rounds=load(LS_ROUNDS);
+ const rated=rounds.filter(r=>r.courseRating);
+ const hcp=calcHandicapIndex(rounds);
+ const label=hcp!==null?String(hcp):rated.length>0?rated.length+"/3":"--";
+ const sub=hcp!==null?"Handicap":rated.length>0?"need "+(3-rated.length)+" more":"Handicap";
+ const col=hcp!==null?C.accent:C.dim;
+ return(
+ <div style={{textAlign:"left",minWidth:72,flexShrink:0}}>
+ <div style={{fontSize:12,letterSpacing:2,color:C.muted,textTransform:"uppercase",
+ fontFamily:"'Crimson Pro',serif",marginBottom:1}}>{sub}</div>
+ <div style={{fontFamily:"'Playfair Display',serif",fontSize:41,fontWeight:900,
+ color:col,lineHeight:1}}>{label}</div>
+ </div>
+ );
+ })()}
+ {}
+ <div style={{flex:1,display:"flex",justifyContent:"center"}}>
+ <PillToggle
+ options={[{value:"hole",label:"Hole"},{value:"card",label:"Card"}]}
+ value={mode}
+ onChange={v=>setMode(v)}
+ />
+ </div>
+ {}
+ <button onClick={()=>setShowSettings(true)}
+ style={{width:50,height:50,borderRadius:25,border:`1px solid ${C.border}`,
+ background:C.surface,color:C.muted,fontSize:24,cursor:"pointer",
+ display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+ &#9881;
+ </button>
+ </div>
+
+ </div>
+
+ {}
+ {showSettings&&<SettingsModal
+ lightMode={lightMode} setLightMode={setLightMode}
+ module={module} setModule={v=>{setModule(v);setShowSettings(false);}}
+ importMsg={importMsg}
+ onClose={()=>setShowSettings(false)}/>}
+
+ {}
+ <div style={{background:C.surface,minHeight:"calc(100vh - 110px)"}}>
+ {module==="play"&&<PlayModule mode={mode} setMode={setMode} hbhDone={hbhDone} setHbhDone={setHbhDone} curHole={curHole} setCurHole={setCurHole}/>}
+ {module==="practice"&&<PracticeModule/>}
+ </div>
+ <div style={{textAlign:"center",padding:"10px 0 20px",background:C.bg,
+ borderTop:`1px solid ${C.border}`}}>
+ <span style={{fontSize:12,color:C.dim,letterSpacing:1,
+ fontFamily:"'Crimson Pro',serif"}}>{APP_VERSION}_{APP_DATE}</span>
+ </div>
+ </div>
+ );
+}
+
+ const root = ReactDOM.createRoot(document.getElementById("root"));
+ root.render(<App/>);
+</script>
+</body>
+</html>
  const adjScore = holesPlayed && holesPlayed < 18
  ? Math.round(score * (18 / holesPlayed))
  : score;
