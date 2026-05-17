@@ -93,7 +93,7 @@ function calcHandicapIndex(rounds) {
  return Math.round(avg(best) * 0.96 * 10) / 10;
 }
 
-const APP_VERSION = "v9.8";
+const APP_VERSION = "v9.9";
 const APP_DATE = "5/14/26";
 const DEFAULT_PAR = [4,3,4,5,4,3,4,4,5, 4,4,3,5,4,3,4,5,4];
 const PRELOADED_COURSES=[{name:"Falconhead Golf Club",pars:[4,4,5,3,4,4,3,5,4,4,4,3,4,5,4,4,3,5],tees:[{label:"Black",color:"#111827",rating:75.7,slope:137},{label:"Blue",color:"#3b82f6",rating:72.5,slope:133},{label:"White",color:"#e5e7eb",rating:69.9,slope:124},{label:"Red",color:"#ef4444",rating:66.4,slope:118}]},{name:"Winged Foot - West",pars:[4,4,4,3,4,4,3,5,4,3,4,5,3,4,4,5,4,4],tees:[{label:"Blue",color:"#3b82f6",rating:76.4,slope:140},{label:"Black",color:"#111827",rating:74.3,slope:134},{label:"White",color:"#e5e7eb",rating:72.2,slope:132},{label:"Gold",color:"#eab308",rating:67.4,slope:124}]},{name:"Winged Foot - East",pars:[4,5,3,5,4,3,4,5,4,4,4,5,3,4,4,4,3,4],tees:[{label:"Blue",color:"#3b82f6",rating:73.6,slope:140},{label:"White",color:"#e5e7eb",rating:72.2,slope:136},{label:"Green",color:"#22c55e",rating:69.9,slope:131},{label:"Gold",color:"#eab308",rating:67.3,slope:124}]}];
@@ -1510,8 +1510,34 @@ function PracticeModule() {
   setHistory(u); save(LS_PRACTICE,u); setEditSess(null);
  };
 
- if(editSess) return <PracticeSession catKey={editSess.category} club={editSess.club}
-  session={editSess} onSave={saveSess} onCancel={()=>setEditSess(null)}/>;
+ if(editSess) {
+  // If club category but no club assigned, prompt for club first
+  if(CLUB_CATS.includes(editSess.category)&&!editSess.club&&!clubPick) {
+   return (
+    <div style={{padding:"14px"}}>
+     <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:16}}>
+      <button onClick={()=>setEditSess(null)} style={{padding:"6px 14px",borderRadius:8,
+       border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:12,
+       cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Cancel</button>
+      <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
+       Assign Club</div>
+     </div>
+     <div style={{fontSize:12,color:C.muted,fontFamily:"'Crimson Pro',serif",marginBottom:14}}>
+      This session has no club. Select one to continue editing.</div>
+     <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+      {CLUBS.map(cl=>(
+       <button key={cl} onClick={()=>setEditSess({...editSess,club:cl})}
+        style={{padding:"10px 16px",borderRadius:10,border:`1px solid ${C.border}`,
+         background:C.bg,cursor:"pointer",fontFamily:"'Crimson Pro',serif",
+         fontSize:13,color:C.text}}>{cl}</button>
+      ))}
+     </div>
+    </div>
+   );
+  }
+  return <PracticeSession catKey={editSess.category} club={editSess.club}
+   session={editSess} onSave={saveSess} onCancel={()=>setEditSess(null)}/>;
+ }
  if(logging) return <PracticeSession catKey={logging.catKey} club={logging.club||null}
   session={null} onSave={saveSess} onCancel={()=>setLogging(null)}/>;
 
@@ -1534,7 +1560,8 @@ function PracticeModule() {
  );
 
  if(drillCat&&drillClub!==null) {
-  const sessions=[...history.filter(s=>s.category===drillCat&&s.club===drillClub)].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const isUnknown=drillClub==="__unknown__";
+  const sessions=[...history.filter(s=>s.category===drillCat&&(isUnknown?!s.club:s.club===drillClub))].sort((a,b)=>new Date(b.date)-new Date(a.date));
   const cat=PRACTICE_CATS.find(c=>c.key===drillCat);
   return (
    <div style={{padding:"14px"}}>
@@ -1543,7 +1570,7 @@ function PracticeModule() {
       border:`1px solid ${C.border}`,background:"transparent",color:C.muted,fontSize:12,
       cursor:"pointer",fontFamily:"'Crimson Pro',serif"}}>Back</button>
      <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,fontWeight:700,color:C.text}}>
-      {cat.label} - {drillClub}</div>
+      {cat.label} - {isUnknown?"Unknown Club":drillClub}</div>
      <button onClick={()=>setLogging({catKey:drillCat,club:drillClub})}
       style={{marginLeft:"auto",padding:"8px 14px",borderRadius:10,border:`1.5px solid ${C.accent}`,
        background:C.accent+"22",color:C.accent,fontSize:12,letterSpacing:1,textTransform:"uppercase",
@@ -1603,7 +1630,23 @@ function PracticeModule() {
          <span style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:col}}>{h}/{l}</span>
         </div>
        </div>);}).filter(Boolean)}
-      {CLUBS.every(cl=>!catSess.find(s=>s.club===cl))&&<div style={{textAlign:"center",padding:"40px 0",color:C.dim,fontFamily:"'Crimson Pro',serif"}}>No sessions yet</div>}
+      {(()=>{const unk=catSess.filter(s=>!s.club);if(!unk.length)return null;
+       const h=unk.reduce((a,s)=>a+s.hits,0),l=unk.reduce((a,s)=>a+s.logged,0),p=Math.round(h/l*100);
+       const col=p>=70?C.green:p>=50?C.muted:C.red;
+       return(<div onClick={()=>setDrillClub("__unknown__")}
+        style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 16px",
+         cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+         <div style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:700,color:C.muted}}>Unknown Club</div>
+         <div style={{fontSize:11,color:C.muted,fontFamily:"'Crimson Pro',serif",marginTop:2}}>
+          {unk.length} session{unk.length!==1?"s":""} - tap to assign clubs</div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+         <span style={{fontSize:10,color:col,background:col+"22",border:`1px solid ${col}44`,borderRadius:8,padding:"2px 8px",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>{p}%</span>
+         <span style={{fontFamily:"'Playfair Display',serif",fontSize:20,fontWeight:700,color:col}}>{h}/{l}</span>
+        </div>
+       </div>);})()}
+      {CLUBS.every(cl=>!catSess.find(s=>s.club===cl))&&!catSess.find(s=>!s.club)&&<div style={{textAlign:"center",padding:"40px 0",color:C.dim,fontFamily:"'Crimson Pro',serif"}}>No sessions yet</div>}
       <button onClick={()=>setClubPick(drillCat)} style={{padding:"13px",borderRadius:12,
        border:`1.5px solid ${C.accent}`,background:C.accent+"22",color:C.accent,fontSize:13,
        letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",fontFamily:"'Crimson Pro',serif",fontWeight:700}}>+ Log Session</button>
